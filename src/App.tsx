@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, ReactNode } from 'react';
 import ReactECharts from 'echarts-for-react';
 import {
   ColumnDef,
@@ -37,6 +37,17 @@ const drillLabels: Record<DrillField, string> = {
   healthLevel: '健康度',
 };
 
+const chartColors = {
+  primary: '#2563eb',
+  primaryLight: '#60a5fa',
+  cyan: '#06b6d4',
+  purple: '#8b5cf6',
+  green: '#10b981',
+  orange: '#f59e0b',
+  red: '#ef4444',
+  gray: '#94a3b8',
+};
+
 export default function App() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -52,6 +63,7 @@ export default function App() {
   const rawPpl = data?.ppl ?? [];
   const filteredPpl = useMemo(() => filterPpl(rawPpl, filters, drillFilters, search, customerQuery), [rawPpl, filters, drillFilters, search, customerQuery]);
   const kpis = useMemo(() => calculateKpis(filteredPpl), [filteredPpl]);
+  const insights = useMemo(() => buildInsights(filteredPpl), [filteredPpl]);
 
   async function handleFile(file: File) {
     setIsDraggingFile(false);
@@ -112,14 +124,18 @@ export default function App() {
     >
       <header className="topbar">
         <div>
-          <p className="eyebrow">本地数据处理 · 静态部署</p>
-          <h1>江苏省办销售 Pipeline 本地分析工作台</h1>
+          <p className="eyebrow">Pipeline & Forecast Analysis</p>
+          <h1>江苏省办销售经营驾驶舱</h1>
+        </div>
+        <div className="header-meta">
+          <span>当前文件：{data?.report.fileName ?? '未导入文件'}</span>
+          <span>导入时间：{data?.report.importedAt ?? '-'}</span>
+          <span>数据范围：PPL {data?.report.pplRows ?? 0} 条 / 活动 {data?.report.activityRows ?? 0} 条</span>
         </div>
         <div className="topbar-actions">
-          <span className="file-name">{data?.report.fileName ?? '未导入文件'}</span>
           <label className="button primary">
             <Upload size={16} />
-            上传 Excel
+            重新上传
             <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => event.target.files?.[0] && handleFile(event.target.files[0])} />
           </label>
           <button className="button ghost" onClick={() => setData(null)} disabled={!data}>
@@ -180,9 +196,11 @@ export default function App() {
                 customerQuery={customerQuery}
                 setCustomerQuery={setCustomerQuery}
                 resetAll={resetAll}
+                resultSummary={`当前结果：${filteredPpl.length.toLocaleString('zh-CN')} 条商机 / ${formatMoney(kpis.totalAmount)}`}
               />
               <DrillTags drillFilters={drillFilters} remove={(filter) => setDrillFilters((current) => current.filter((item) => item !== filter))} clear={() => setDrillFilters([])} />
               <KpiGrid kpis={kpis} />
+              <InsightBanner insights={insights} />
               {filteredPpl.length === 0 ? (
                 <StatusCard title="当前筛选条件下没有数据" description="请调整筛选条件或清空筛选。" />
               ) : (
@@ -210,7 +228,7 @@ export default function App() {
   );
 }
 
-function FilterBar({ data, filters, setFilters, search, setSearch, customerQuery, setCustomerQuery, resetAll }: {
+function FilterBar({ data, filters, setFilters, search, setSearch, customerQuery, setCustomerQuery, resetAll, resultSummary }: {
   data: PPLRecord[];
   filters: Filters;
   setFilters: (filters: Filters) => void;
@@ -219,6 +237,7 @@ function FilterBar({ data, filters, setFilters, search, setSearch, customerQuery
   customerQuery: string;
   setCustomerQuery: (customerQuery: string) => void;
   resetAll: () => void;
+  resultSummary: string;
 }) {
   const config: Array<[keyof Filters, keyof PPLRecord, string]> = [
     ['owner', 'owner', '销售'],
@@ -230,33 +249,41 @@ function FilterBar({ data, filters, setFilters, search, setSearch, customerQuery
   ];
   return (
     <section className="filters">
-      {config.map(([filterKey, field, label]) => (
-        <label key={filterKey}>
-          <span>{label}</span>
-          <select value={filters[filterKey]} onChange={(event) => setFilters({ ...filters, [filterKey]: event.target.value })}>
-            <option value="">全部</option>
-            {uniqueOptions(data, field).map((option) => <option key={option} value={option}>{option}</option>)}
-          </select>
+      <div className="filter-header">
+        <div>
+          <strong>分析条件</strong>
+          <span>{resultSummary}</span>
+        </div>
+        <button className="button ghost" onClick={resetAll}>
+          <X size={16} />
+          重置筛选
+        </button>
+      </div>
+      <div className="filter-grid">
+        {config.map(([filterKey, field, label]) => (
+          <label key={filterKey}>
+            <span>{label}</span>
+            <select value={filters[filterKey]} onChange={(event) => setFilters({ ...filters, [filterKey]: event.target.value })}>
+              <option value="">全部</option>
+              {uniqueOptions(data, field).map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+        ))}
+        <label className="search-box">
+          <span>搜索</span>
+          <Search size={15} />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="客户、销售、产品、商机" />
         </label>
-      ))}
-      <label className="search-box">
-        <span>搜索</span>
-        <Search size={15} />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="客户、销售、产品、商机" />
-      </label>
-      <label className="customer-box">
-        <span>指定客户</span>
-        <textarea
-          value={customerQuery}
-          onChange={(event) => setCustomerQuery(event.target.value)}
-          placeholder="一行一个客户，或用逗号分隔"
-          rows={3}
-        />
-      </label>
-      <button className="button ghost" onClick={resetAll}>
-        <X size={16} />
-        清空筛选
-      </button>
+        <label className="customer-box">
+          <span>指定客户</span>
+          <textarea
+            value={customerQuery}
+            onChange={(event) => setCustomerQuery(event.target.value)}
+            placeholder="一行一个客户，或用逗号分隔"
+            rows={3}
+          />
+        </label>
+      </div>
     </section>
   );
 }
@@ -279,21 +306,16 @@ function DrillTags({ drillFilters, remove, clear }: { drillFilters: DrillFilter[
 
 function KpiGrid({ kpis }: { kpis: ReturnType<typeof calculateKpis> }) {
   const items = [
-    ['商机总数', kpis.opportunityCount.toLocaleString('zh-CN')],
-    ['商机总金额', formatMoney(kpis.totalAmount)],
-    ['客户数', kpis.customerCount.toLocaleString('zh-CN')],
-    ['加权赢单率', formatPercent(kpis.weightedWinRate)],
-    ['Forecast 金额', formatMoney(kpis.forecastAmount)],
-    ['风险商机数', kpis.riskCount.toLocaleString('zh-CN')],
+    { label: '商机总金额', value: formatMoney(kpis.totalAmount), hint: '当前筛选范围内', tone: 'blue' },
+    { label: '商机数量', value: kpis.opportunityCount.toLocaleString('zh-CN'), hint: 'PPL 明细记录', tone: 'purple' },
+    { label: '客户数量', value: kpis.customerCount.toLocaleString('zh-CN'), hint: '客户名称去重', tone: 'cyan' },
+    { label: '加权赢单率', value: formatPercent(kpis.weightedWinRate), hint: '按金额加权', tone: 'green' },
+    { label: 'Forecast 金额', value: formatMoney(kpis.forecastAmount), hint: 'Commit / Best Case', tone: 'orange' },
+    { label: '风险商机', value: kpis.riskCount.toLocaleString('zh-CN'), hint: '需重点跟进', tone: 'red' },
   ];
   return (
     <section className="kpi-grid">
-      {items.map(([label, value]) => (
-        <article className="kpi-card" key={label}>
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </article>
-      ))}
+      {items.map((item) => <MetricCard key={item.label} {...item} />)}
     </section>
   );
 }
@@ -308,68 +330,159 @@ function ChartGrid({ data, toggleDrill }: { data: PPLRecord[]; toggleDrill: (fie
 
   return (
     <section className="chart-grid">
-      <ChartCard title="销售金额 TOP 10" option={barOption(owner, 'owner')} onClick={(name) => toggleDrill('owner', name)} />
-      <ChartCard title="一级行业金额分布" option={donutOption(industry)} onClick={(name) => toggleDrill('industryLevel1', name)} />
-      <ChartCard title="产品金额 TOP 15" option={barOption(product, 'product', true)} onClick={(name) => toggleDrill('product', name)} />
-      <ChartCard title="季度落单金额分布" option={quarterOption(quarter)} onClick={(name) => toggleDrill('expectedQuarter', name)} />
+      <ChartCard title="销售金额 TOP 10" subtitle={topInsight(owner, '暂无销售数据')} option={barOption(owner, true, chartColors.primary)} onClick={(name) => toggleDrill('owner', name)} />
+      <DistributionCard title="行业金额分布" subtitle={shareInsight(industry, '行业')} items={industry} onClick={(name) => toggleDrill('industryLevel1', name)} />
+      <ChartCard title="产品金额排行" subtitle={topInsight(product, '暂无产品数据')} option={barOption(product, true, chartColors.purple)} onClick={(name) => toggleDrill('product', name)} />
+      <ChartCard title="季度落单金额分布" subtitle={topInsight(quarter, '暂无季度数据')} option={quarterOption(quarter)} onClick={(name) => toggleDrill('expectedQuarter', name)} />
       <HealthCard items={health} onClick={(name) => toggleDrill('healthLevel', name)} />
-      <ChartCard title="Forecast 金额占比" option={donutOption(forecast)} onClick={(name) => toggleDrill('forecastType', name)} />
+      <DistributionCard title="Forecast Pipeline 结构" subtitle={shareInsight(forecast, 'Forecast')} items={forecast} onClick={(name) => toggleDrill('forecastType', name)} />
     </section>
   );
 }
 
-function ChartCard({ title, option, onClick }: { title: string; option: object; onClick: (name: string) => void }) {
+function DashboardCard({ title, subtitle, action, children, className = '' }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <article className="chart-card">
-      <h3>{title}</h3>
+    <article className={`dashboard-card ${className}`}>
+      <div className="dashboard-card-header">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </article>
+  );
+}
+
+function MetricCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: string }) {
+  return (
+    <article className={`kpi-card tone-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <em>{hint}</em>
+    </article>
+  );
+}
+
+function InsightBanner({ insights }: { insights: string[] }) {
+  return (
+    <section className="insight-banner">
+      <strong>经营洞察</strong>
+      <div>
+        {insights.map((insight) => <span key={insight}>{insight}</span>)}
+      </div>
+    </section>
+  );
+}
+
+function ChartCard({ title, subtitle, option, onClick }: { title: string; subtitle?: string; option: object; onClick: (name: string) => void }) {
+  return (
+    <DashboardCard title={title} subtitle={subtitle}>
       <ReactECharts
         option={option}
         style={{ height: 300 }}
         onEvents={{ click: (params: { name?: unknown; value?: unknown[] }) => onClick(String(params.name ?? params.value?.[3] ?? '')) }}
         notMerge
       />
-    </article>
+    </DashboardCard>
   );
 }
 
 function baseChart() {
   return {
     backgroundColor: 'transparent',
-    textStyle: { color: '#cbd5e1', fontFamily: 'Inter, system-ui, sans-serif' },
-    tooltip: { trigger: 'item', backgroundColor: '#0f172a', borderColor: 'rgba(148,163,184,.22)', textStyle: { color: '#e5edf7' } },
-    grid: { left: 54, right: 24, top: 24, bottom: 38 },
+    animationDuration: 600,
+    animationEasing: 'cubicOut',
+    textStyle: { color: '#111827', fontFamily: 'Inter, system-ui, sans-serif' },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(17, 24, 39, 0.92)',
+      borderWidth: 0,
+      padding: [10, 12],
+      extraCssText: 'border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18);',
+      textStyle: { color: '#f9fafb', fontSize: 12 },
+    },
+    grid: { left: 16, right: 56, top: 18, bottom: 18, containLabel: true },
   };
 }
 
-function barOption(items: Array<{ name: string; value: number }>, _field: string, horizontal = false) {
-  const names = items.map((item) => item.name);
-  const values = items.map((item) => item.value);
+function barOption(items: Array<{ name: string; value: number }>, horizontal = false, color = chartColors.primary) {
+  const displayItems = horizontal ? [...items].reverse() : items;
+  const names = displayItems.map((item) => item.name);
+  const values = displayItems.map((item) => item.value);
   return {
     ...baseChart(),
-    xAxis: horizontal ? { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.1)' } } } : { type: 'category', data: names, axisLabel: { color: '#94a3b8', interval: 0, rotate: 35 } },
-    yAxis: horizontal ? { type: 'category', data: names.reverse(), axisLabel: { color: '#94a3b8', width: 92, overflow: 'truncate' } } : { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.1)' } } },
-    series: [{ type: 'bar', data: horizontal ? values.reverse() : values, name: '金额(万元)', barMaxWidth: 22, itemStyle: { color: '#06b6d4', borderRadius: 4 } }],
+    xAxis: horizontal ? axisValue() : axisCategory(names),
+    yAxis: horizontal ? axisCategory(names, 120) : axisValue(),
+    series: [{
+      type: 'bar',
+      data: values.map((value, index) => ({
+        value,
+        itemStyle: { color: index === values.length - 1 && horizontal ? chartColors.primary : color, borderRadius: 6 },
+      })),
+      name: '金额(万元)',
+      barMaxWidth: 14,
+      label: { show: true, position: 'right', color: '#374151', fontSize: 12, formatter: ({ value }: { value: number }) => `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万` },
+    }],
   };
 }
 
 function donutOption(items: Array<{ name: string; value: number }>) {
   return {
     ...baseChart(),
-    legend: { orient: 'vertical', right: 4, top: 'middle', textStyle: { color: '#94a3b8' } },
-    series: [{ type: 'pie', radius: ['48%', '70%'], center: ['36%', '52%'], data: items, itemStyle: { borderColor: '#121a2c', borderWidth: 2 } }],
+    color: [chartColors.primary, chartColors.cyan, chartColors.purple, chartColors.green, chartColors.orange, chartColors.gray],
+    legend: { show: false },
+    series: [{ type: 'pie', radius: ['55%', '76%'], center: ['50%', '52%'], label: { show: false }, labelLine: { show: false }, data: items, itemStyle: { borderColor: '#ffffff', borderWidth: 3 } }],
   };
 }
 
 function quarterOption(items: Array<{ name: string; value: number; count: number }>) {
   return {
     ...baseChart(),
-    xAxis: { type: 'category', data: items.map((item) => item.name), axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.1)' } } },
+    tooltip: { ...baseChart().tooltip, trigger: 'axis' },
+    xAxis: axisCategory(items.map((item) => item.name)),
+    yAxis: axisValue(),
     series: [
-      { type: 'bar', name: '金额(万元)', data: items.map((item) => item.value), itemStyle: { color: '#22c55e', borderRadius: 4 } },
-      { type: 'line', name: '商机数', data: items.map((item) => item.count), yAxisIndex: 0, smooth: true, symbolSize: 8, itemStyle: { color: '#f59e0b' } },
+      { type: 'bar', name: '金额(万元)', data: items.map((item) => item.value), barMaxWidth: 24, itemStyle: { color: chartColors.primary, borderRadius: 6 } },
+      { type: 'line', name: '商机数', data: items.map((item) => item.count), yAxisIndex: 0, smooth: true, symbolSize: 8, itemStyle: { color: chartColors.orange } },
     ],
   };
+}
+
+function axisCategory(data: string[], width?: number) {
+  return { type: 'category', data, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 12, width, overflow: width ? 'truncate' : undefined } };
+}
+
+function axisValue() {
+  return { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 12 }, splitLine: { lineStyle: { color: '#eef2f7' } } };
+}
+
+function DistributionCard({ title, subtitle, items, onClick }: { title: string; subtitle?: string; items: Array<{ name: string; value: number; count: number }>; onClick: (name: string) => void }) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  return (
+    <DashboardCard title={title} subtitle={subtitle}>
+      <div className="distribution-card">
+        <div className="donut-wrap">
+          <ReactECharts option={donutOption(items)} style={{ height: 230 }} onEvents={{ click: (params: { name?: unknown }) => onClick(String(params.name ?? '')) }} notMerge />
+          <div className="donut-center">
+            <span>总金额</span>
+            <strong>{formatMoney(total)}</strong>
+          </div>
+        </div>
+        <div className="distribution-list">
+          {items.slice(0, 6).map((item, index) => (
+            <button key={item.name} onClick={() => onClick(item.name)}>
+              <i style={{ background: [chartColors.primary, chartColors.cyan, chartColors.purple, chartColors.green, chartColors.orange, chartColors.gray][index % 6] }} />
+              <span>{item.name}</span>
+              <strong>{total ? `${((item.value / total) * 100).toFixed(0)}%` : '0%'}</strong>
+              <em>{formatMoney(item.value)}</em>
+            </button>
+          ))}
+        </div>
+      </div>
+    </DashboardCard>
+  );
 }
 
 function healthSummary(data: PPLRecord[]) {
@@ -378,11 +491,37 @@ function healthSummary(data: PPLRecord[]) {
   return order.map((name) => grouped.find((item) => item.name === name) ?? { name, value: 0, count: 0 });
 }
 
+function topInsight(items: Array<{ name: string; value: number }>, empty: string) {
+  const top = [...items].sort((a, b) => b.value - a.value)[0];
+  return top ? `${top.name} 最高，金额 ${formatMoney(top.value)}` : empty;
+}
+
+function shareInsight(items: Array<{ name: string; value: number }>, label: string) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const top = [...items].sort((a, b) => b.value - a.value)[0];
+  if (!top || total === 0) return `暂无${label}数据`;
+  return `${top.name} 占比 ${((top.value / total) * 100).toFixed(0)}%，结构${top.value / total > 0.7 ? '较集中' : '较均衡'}`;
+}
+
+function buildInsights(rows: PPLRecord[]) {
+  const owner = groupAmount(rows, 'owner', 1)[0];
+  const product = groupAmount(rows, 'product', 1)[0];
+  const industry = groupAmount(rows, 'industryLevel1', 1)[0];
+  const quarter = groupAmount(rows, 'expectedQuarter', 1)[0];
+  const riskCount = rows.filter((row) => row.healthLevel === '风险').length;
+  return [
+    owner ? `最高销售：${owner.name}，${formatMoney(owner.value)}` : '暂无销售排行',
+    product ? `最高产品：${product.name}` : '暂无产品排行',
+    industry ? `最高行业：${industry.name}` : '暂无行业排行',
+    quarter ? `最高季度：${quarter.name}` : '暂无季度排行',
+    `风险商机：${riskCount.toLocaleString('zh-CN')} 个`,
+  ];
+}
+
 function HealthCard({ items, onClick }: { items: Array<{ name: string; value: number; count: number }>; onClick: (name: string) => void }) {
   const max = Math.max(...items.map((item) => item.value), 1);
   return (
-    <article className="chart-card health-card">
-      <h3>健康度金额与商机数分布</h3>
+    <DashboardCard title="健康度金额与商机数分布" subtitle={topInsight(items, '暂无健康度数据')} className="health-card">
       <div className="health-bars">
         {items.map((item) => (
           <button className="health-bar-row" key={item.name} onClick={() => onClick(item.name)}>
@@ -396,7 +535,7 @@ function HealthCard({ items, onClick }: { items: Array<{ name: string; value: nu
           </button>
         ))}
       </div>
-    </article>
+    </DashboardCard>
   );
 }
 
@@ -523,21 +662,22 @@ function KeyCustomerCharts({ analysis }: { analysis: KeyCustomerAnalysis }) {
   const chartData = analysis.chartData;
   return (
     <section className="chart-grid">
-      <ChartCard title="客户商机金额排行" option={barOption(chartData.customerAmountRank, 'customerName', true)} onClick={() => undefined} />
+      <ChartCard title="客户商机金额排行" subtitle={topInsight(chartData.customerAmountRank, '暂无客户金额数据')} option={barOption(chartData.customerAmountRank, true, chartColors.primary)} onClick={() => undefined} />
       <ChartCard title="客户商机数量排行" option={countBarOption(chartData.customerCountRank, true)} onClick={() => undefined} />
-      <ChartCard title="产品金额分布" option={donutOption(chartData.productAmount)} onClick={() => undefined} />
-      <ChartCard title="销售负责人分布" option={donutOption(chartData.ownerAmount)} onClick={() => undefined} />
-      <ChartCard title="商机阶段分布" option={barOption(chartData.stageAmount, 'stage', true)} onClick={() => undefined} />
+      <DistributionCard title="产品金额分布" subtitle={shareInsight(chartData.productAmount, '产品')} items={chartData.productAmount} onClick={() => undefined} />
+      <DistributionCard title="销售负责人分布" subtitle={shareInsight(chartData.ownerAmount, '销售')} items={chartData.ownerAmount} onClick={() => undefined} />
+      <ChartCard title="商机阶段分布" subtitle={topInsight(chartData.stageAmount, '暂无阶段数据')} option={barOption(chartData.stageAmount, true, chartColors.orange)} onClick={() => undefined} />
     </section>
   );
 }
 
 function countBarOption(items: Array<{ name: string; value: number }>, horizontal = false) {
-  const option = barOption(items, 'count', horizontal) as { series: Array<Record<string, unknown>> };
+  const option = barOption(items, horizontal, chartColors.cyan) as { series: Array<Record<string, unknown>> };
   option.series[0] = {
     ...option.series[0],
     name: '商机数',
     itemStyle: { color: '#38bdf8', borderRadius: 4 },
+    label: { show: true, position: 'right', color: '#374151', fontSize: 12, formatter: ({ value }: { value: number }) => `${value.toLocaleString('zh-CN')} 个` },
   };
   return option;
 }
