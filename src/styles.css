@@ -220,11 +220,24 @@ h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
 .key-customer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .key-customer-note { margin: 10px 0 0; color: var(--color-text-secondary); font-size: 12px; }
 .key-customer-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.unmatched-panel { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #fed7aa; border-radius: var(--radius-control); color: #c2410c; background: #fff7ed; }
-.unmatched-panel span { color: var(--color-text-primary); }
+.unmatched-table-panel { border-color: #fed7aa; background: #fffaf5; }
+.unmatched-table-panel .section-title h2 { color: #c2410c; }
+.unmatched-table-wrap { border-color: #fed7aa; }
+.unmatched-table { min-width: 760px; }
+.unmatched-table th { background: #fff7ed; }
+.unmatched-table th:first-child, .unmatched-table td:first-child { width: 72px; text-align: center; }
+.unmatched-table th:nth-child(3), .unmatched-table td:nth-child(3) { width: 120px; }
+.unmatched-table th:nth-child(4), .unmatched-table td:nth-child(4) { width: 280px; color: var(--color-text-secondary); }
+.unmatched-table td:nth-child(2) { max-width: none; white-space: normal; line-height: 1.45; }
 .match-status { display: inline-flex; min-width: 56px; justify-content: center; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
 .match-status.success { color: #047857; background: #d1fae5; }
 .match-status.failed { color: #b91c1c; background: #fee2e2; }
+.match-chart-grid { display: grid; grid-template-columns: minmax(260px, .9fr) repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.match-chart-grid .dashboard-card { box-shadow: none; }
+.match-rate-card { position: relative; min-height: 190px; }
+.match-rate-card > div:last-child { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.match-rate-card strong { display: block; font-size: 30px; line-height: 1.1; }
+.match-rate-card span { display: block; margin-top: 6px; color: var(--color-text-secondary); font-size: 12px; }
 
 .table-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--color-border-soft); background: var(--color-surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); position: relative; }
 .section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -268,7 +281,7 @@ td:nth-child(6), th:nth-child(6) { text-align: right; }
 @media (max-width: 900px) {
   .app-shell { padding: 12px; }
   .filter-header, .section-title { align-items: stretch; flex-direction: column; }
-  .report-panel, .chart-grid, .distribution-card { grid-template-columns: 1fr; }
+  .report-panel, .chart-grid, .distribution-card, .match-chart-grid { grid-template-columns: 1fr; }
   .kpi-grid, .key-customer-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .key-customer-input { grid-template-columns: 1fr; }

@@ -1,4 +1,15 @@
 import type { DrillFilter, Filters, PPLRecord } from '../domain';
+import { normalizeCustomerName } from './normalize';
+
+/** KPI 汇总类型（提供给 hooks/components 复用） */
+export interface KPISummary {
+  opportunityCount: number;
+  totalAmount: number;
+  customerCount: number;
+  weightedWinRate: number;
+  forecastAmount: number;
+  riskCount: number;
+}
 
 export interface AggregatedPplRow {
   customerName: string;
@@ -13,7 +24,7 @@ export interface AggregatedPplRow {
   riskCount: number;
 }
 
-export function filterPpl(data: PPLRecord[], filters: Filters, drillFilters: DrillFilter[], search: string, customerQuery = '') {
+export function filterPpl(data: PPLRecord[], filters: Partial<Filters>, drillFilters: DrillFilter[], search: string, customerQuery = '') {
   const keyword = search.trim().toLowerCase();
   const customerTerms = parseCustomerTerms(customerQuery);
   return data.filter((row) => {
@@ -26,7 +37,7 @@ export function filterPpl(data: PPLRecord[], filters: Filters, drillFilters: Dri
     const drillOk = drillFilters.every((filter) => String(row[filter.field]) === filter.value);
     const searchOk = !keyword || [row.owner, row.customerName, row.opportunityName, row.product, row.industryLevel1]
       .some((value) => value.toLowerCase().includes(keyword));
-    const customerOk = customerTerms.length === 0 || customerTerms.some((term) => normalizeCustomer(row.customerName).includes(term));
+    const customerOk = customerTerms.length === 0 || customerTerms.some((term) => normalizeCustomerName(row.customerName).includes(term));
     return manualOk && drillOk && searchOk && customerOk;
   });
 }
@@ -37,7 +48,7 @@ export function calculateKpis(data: PPLRecord[]) {
   return {
     opportunityCount: data.length,
     totalAmount,
-    customerCount: new Set(data.map((row) => normalizeCustomer(row.customerName)).filter(Boolean)).size,
+    customerCount: new Set(data.map((row) => normalizeCustomerName(row.customerName)).filter(Boolean)).size,
     weightedWinRate,
     forecastAmount: sum(data.filter((row) => row.forecastType === 'Commit' || row.forecastType === 'Best Case').map((row) => row.amount)),
     riskCount: data.filter((row) => row.healthLevel === '风险').length,
@@ -53,7 +64,10 @@ export function groupAmount(data: PPLRecord[], field: keyof PPLRecord, limit = 1
     prev.count += 1;
     map.set(name, prev);
   });
-  return Array.from(map.values()).sort((a, b) => b.value - a.value).slice(0, limit);
+  // 排序：金额降序 → 同金额按商机数降序 → 同数按名称字典序，保证稳定
+  return Array.from(map.values())
+    .sort((a, b) => b.value - a.value || b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'))
+    .slice(0, limit);
 }
 
 export function uniqueOptions(data: PPLRecord[], field: keyof PPLRecord) {
@@ -63,7 +77,7 @@ export function uniqueOptions(data: PPLRecord[], field: keyof PPLRecord) {
 export function aggregatePpl(rows: PPLRecord[]): AggregatedPplRow[] {
   const map = new Map<string, AggregatedPplRow & { weightedAmount: number; ownerSet: Set<string> }>();
   rows.forEach((row) => {
-    const key = [row.customerName, row.industryLevel1, row.product, row.stage].join('\u0001');
+    const key = [row.customerName, row.industryLevel1, row.product, row.stage].join('');
     const current = map.get(key) ?? {
       customerName: row.customerName,
       industryLevel1: row.industryLevel1,
@@ -104,9 +118,9 @@ export function exportCsv(rows: PPLRecord[]) {
     row.opportunityName,
     row.industryLevel1,
     row.product,
-    row.amount,
+    row.amount.toFixed(1),  // L 修复：CSV 数字精度统一
     row.stage,
-    row.winRate,
+    row.winRate.toFixed(2),
     row.forecastType,
     row.expectedQuarter,
     row.healthLevel,
@@ -124,9 +138,9 @@ export function exportAggregationCsv(rows: AggregatedPplRow[]) {
     row.stage,
     row.owners,
     row.opportunityCount,
-    row.totalAmount,
-    row.weightedWinRate,
-    row.forecastAmount,
+    row.totalAmount.toFixed(1),
+    row.weightedWinRate.toFixed(2),
+    row.forecastAmount.toFixed(1),
     row.riskCount,
   ]);
   downloadCsv([headers, ...body], `pipeline-aggregation-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -134,7 +148,7 @@ export function exportAggregationCsv(rows: AggregatedPplRow[]) {
 
 export function downloadCsv(lines: unknown[][], fileName: string) {
   const csv = lines.map((line) => line.map(escapeCsv).join(',')).join('\n');
-  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -143,19 +157,19 @@ export function downloadCsv(lines: unknown[][], fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * 修复 H5：增加 \r 转义。
+ * Windows 源数据可能含 \r，未转义会导致 CSV 解析错位。
+ */
 function escapeCsv(value: unknown) {
   const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function normalizeCustomer(value: string) {
-  return value.replace(/\s/g, '').replace(/有限责任公司|有限公司/g, '').toLowerCase();
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function parseCustomerTerms(value: string) {
   return value
     .split(/[\n,，;；、]+/)
-    .map((term) => normalizeCustomer(term.trim()))
+    .map((term) => normalizeCustomerName(term.trim()))
     .filter(Boolean);
 }
 

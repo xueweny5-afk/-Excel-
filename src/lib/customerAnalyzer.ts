@@ -1,7 +1,8 @@
 import type { ActivityRecord, PPLRecord } from '../domain';
 import { downloadCsv, groupAmount } from './analyzer';
-import { matchCustomers, normalizeCustomerName } from './customerMatcher';
+import { matchCustomers } from './customerMatcher';
 import type { CustomerMatchResult } from './customerMatcher';
+import { normalizeCustomerName } from './normalize';
 
 export interface KeyCustomerAnalysis {
   inputNames: string[];
@@ -69,9 +70,9 @@ export function exportKeyCustomerCsv(rows: PPLRecord[]) {
     row.opportunityName,
     row.industryLevel1,
     row.product,
-    row.amount,
+    row.amount.toFixed(1),
     row.stage,
-    row.winRate,
+    row.winRate.toFixed(2),
     row.forecastType,
     row.expectedQuarter,
     row.healthLevel,

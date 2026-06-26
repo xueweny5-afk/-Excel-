@@ -4,27 +4,74 @@ import { PPL_FIELD_ALIASES, REQUIRED_PPL_FIELDS } from '../fieldAliases';
 
 type Row = Record<string, unknown>;
 
+// ========== 文件/Sheet 安全边界 ==========
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_SHEETS = 20;
 const MAX_ROWS = 50000;
 const MAX_COLS = 200;
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/**
+ * 完整的原型链污染防护键。
+ * 覆盖 JS 内置危险属性、Object.prototype 方法、Symbol 注入等。
+ */
+const DANGEROUS_KEYS = new Set([
+  '__proto__', 'constructor', 'prototype',
+  'valueOf', 'hasOwnProperty', 'toString',
+  '__defineGetter__', '__defineSetter__',
+  '__lookupGetter__', '__lookupSetter__',
+  '__proto__', '__noSuchMethod__',
+  'isPrototypeOf', 'propertyIsEnumerable',
+]);
+
+// ========== 健康度算法常量 ==========
+/** 各销售阶段对应的成熟度权重（0-1） */
 const STAGE_WEIGHTS: Record<string, number> = {
   初步接洽: 0.2,
   需求确认: 0.4,
   方案交流: 0.5,
+  方案评估: 0.55,
+  POC: 0.6,
   测试验证: 0.65,
   商务谈判: 0.8,
+  合同谈判: 0.85,
   合同流程: 0.9,
   赢单: 1,
   输单: 0,
 };
 
+/** 健康度阈值（综合得分 ≥ X 为该等级） */
+const HEALTH_THRESHOLDS = {
+  healthy: 0.7,
+  watch: 0.4,
+} as const;
+
+/** 大额商机阈值（万元） */
+const LARGE_AMOUNT = 500;
+/** 大额低赢单率阈值 */
+const LARGE_LOW_WIN_RATE = 0.3;
+/** 早期阶段阈值天数（距今 ≤ X 天且处于早期阶段则风险） */
+const EARLY_STAGE_DAYS = 90;
+/** 单元格最大长度（防止恶意超长字符串污染内存） */
+const MAX_CELL_LENGTH = 10000;
+
+/**
+ * PPLRecord.id 计数种子。
+ * 用稳定的 rowNumber + 业务字段组合，避免按 index 漂移导致 React 重渲染错乱。
+ */
+const ID_SEPARATOR = '|';
+
+// ========== 入口 ==========
 export async function parseDashboardFile(file: File): Promise<DashboardData> {
   validateFile(file);
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellHTML: false, cellFormula: false, cellNF: false });
-  if (workbook.SheetNames.length > MAX_SHEETS) throw new Error(`Sheet 数超过 ${MAX_SHEETS} 个，请拆分文件后再导入。`);
+  const workbook = XLSX.read(await file.arrayBuffer(), {
+    type: 'array',
+    cellHTML: false,
+    cellFormula: false,
+    cellNF: false,
+  });
+  if (workbook.SheetNames.length > MAX_SHEETS) {
+    throw new Error(`Sheet 数超过 ${MAX_SHEETS} 个，请拆分文件后再导入。`);
+  }
 
   const sheets = workbook.SheetNames.reduce<Record<string, Row[]>>((acc, sheetName) => {
     const sheet = workbook.Sheets[sheetName];
@@ -81,12 +128,24 @@ function validateFile(file: File) {
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
   if (!allowed.includes(ext)) throw new Error('仅支持 .xlsx / .xls / .csv 文件。');
   if (file.size > MAX_FILE_SIZE) throw new Error('文件超过 20MB，请拆分后再导入。');
+  // MIME 类型二次校验（防御文件名伪装）
+  const allowedMimePrefixes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml',
+    'application/vnd.ms-excel',
+    'text/csv',
+    'application/octet-stream', // 浏览器对部分 xlsx 返回 generic
+  ];
+  if (file.type && !allowedMimePrefixes.some((prefix) => file.type.startsWith(prefix))) {
+    throw new Error(`文件 MIME 类型不合法：${file.type}，请确认是 Excel/CSV 文件。`);
+  }
 }
 
 function sanitizeRow(row: Row): Row {
   return Object.entries(row).reduce<Row>((acc, [key, value]) => {
     if (DANGEROUS_KEYS.has(key)) return acc;
-    acc[String(key).trim()] = typeof value === 'string' ? value.trim().slice(0, 10000) : value;
+    const cleanKey = String(key).trim();
+    if (DANGEROUS_KEYS.has(cleanKey)) return acc;
+    acc[cleanKey] = typeof value === 'string' ? value.trim().slice(0, MAX_CELL_LENGTH) : value;
     return acc;
   }, {});
 }
@@ -108,7 +167,7 @@ function normalizeHeader(value: string) {
   return value.replace(/\s/g, '').toLowerCase();
 }
 
-function normalizePpl(row: Row, fieldMap: Record<string, string>, index: number, warnings: string[]): PPLRecord | null {
+function normalizePpl(row: Row, fieldMap: Record<string, string>, rowNumber: number, warnings: string[]): PPLRecord | null {
   const owner = readString(row, fieldMap.owner);
   const customerName = readString(row, fieldMap.customerName);
   const opportunityName = readString(row, fieldMap.opportunityName);
@@ -124,7 +183,7 @@ function normalizePpl(row: Row, fieldMap: Record<string, string>, index: number,
   const health = scoreHealth({ amount, winRate, stage, status, expectedCloseDate, customerName, expectedQuarter });
 
   return {
-    id: `${index}-${owner}-${customerName}-${opportunityName}`,
+    id: buildRecordId(rowNumber, owner, customerName, opportunityName),
     owner: owner || '未填写',
     customerName: customerName || '未填写',
     opportunityName: opportunityName || '未命名商机',
@@ -145,6 +204,14 @@ function normalizePpl(row: Row, fieldMap: Record<string, string>, index: number,
   };
 }
 
+/**
+ * 构造稳定 ID：以原始行号 + 业务字段组合。
+ * 即便下游筛选/排序变化，ID 仍能稳定标识同一条记录。
+ */
+function buildRecordId(rowNumber: number, owner: string, customer: string, opportunity: string): string {
+  return [rowNumber, owner, customer, opportunity].join(ID_SEPARATOR);
+}
+
 function readString(row: Row, key?: string) {
   return key ? String(row[key] ?? '').trim() : '';
 }
@@ -159,12 +226,19 @@ function parseAmount(value: unknown) {
   return numeric;
 }
 
+/**
+ * 解析赢单率。
+ *
+ * 修复 H2 bug：原先 `text.includes('%') || numeric > 1` 会把已经存为小数的
+ * "1.5"（100%+）误判成百分比 → 0.015。
+ * 新规则：只有显式包含 `%` 才视为百分比字符串，否则按原样作为 0-1 小数。
+ */
 function parseRate(value: unknown) {
   if (value === null || value === undefined || value === '') return 0;
   const text = String(value).trim();
   const numeric = Number(text.replace('%', ''));
   if (!Number.isFinite(numeric)) return 0;
-  return text.includes('%') || numeric > 1 ? numeric / 100 : numeric;
+  return text.includes('%') ? numeric / 100 : numeric;
 }
 
 function parseForecast(value: unknown): ForecastType {
@@ -176,42 +250,61 @@ function parseForecast(value: unknown): ForecastType {
   return 'Unknown';
 }
 
-function inferQuarter(value: string) {
+/**
+ * 将日期字符串推断为标准季度。
+ * 输出格式：Q{1-4}'{4 位年份}，例如 "Q2'2026"
+ */
+export function inferQuarter(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return `Q${Math.floor(date.getMonth() / 3) + 1}'${date.getFullYear()}`;
 }
 
-function scoreHealth(input: { amount: number; winRate: number; stage: string; status: string; expectedCloseDate: string; customerName: string; expectedQuarter: string }) {
+function scoreHealth(input: {
+  amount: number;
+  winRate: number;
+  stage: string;
+  status: string;
+  expectedCloseDate: string;
+  customerName: string;
+  expectedQuarter: string;
+}) {
   const matchedStage = Object.keys(STAGE_WEIGHTS).find((stage) => input.stage.includes(stage));
   const stageScore = matchedStage ? STAGE_WEIGHTS[matchedStage] : 0.45;
   const closeDateScore = scoreCloseDate(input.expectedCloseDate, input.stage);
-  const amountQualityScore = input.amount <= 0 ? 0 : input.amount > 500 ? 0.65 : 1;
+  const amountQualityScore = input.amount <= 0 ? 0 : input.amount > LARGE_AMOUNT ? 0.65 : 1;
   const score = stageScore * 0.4 + input.winRate * 0.3 + closeDateScore * 0.2 + amountQualityScore * 0.1;
   const reasons: string[] = [];
-  let level: HealthLevel = score >= 0.7 ? '健康' : score >= 0.4 ? '关注' : '风险';
+  let level: HealthLevel = score >= HEALTH_THRESHOLDS.healthy
+    ? '健康'
+    : score >= HEALTH_THRESHOLDS.watch
+      ? '关注'
+      : '风险';
 
+  // H3 修复：所有降级统一走 worse()，避免直接赋值绕过已有等级
   if (input.amount <= 0) {
     level = worse(level, '关注');
     reasons.push('金额为空或为 0');
   }
   if (!input.customerName || input.customerName === '未填写') {
-    level = '风险';
+    level = worse(level, '风险');
     reasons.push('客户名称为空');
   }
-  if (input.amount > 500 && input.winRate < 0.3) {
+  if (input.amount > LARGE_AMOUNT && input.winRate < LARGE_LOW_WIN_RATE) {
     level = worse(level, '关注');
-    reasons.push('金额大于 500 万且赢单率低于 30%');
+    reasons.push(`金额大于 ${LARGE_AMOUNT} 万且赢单率低于 ${(LARGE_LOW_WIN_RATE * 100).toFixed(0)}%`);
   }
   if (isExpired(input.expectedCloseDate) && !/赢单|输单|关闭/.test(input.status)) {
-    level = '风险';
+    level = worse(level, '风险');
     reasons.push('预计落单时间已过但状态未关闭');
   }
   if (isCurrentQuarter(input.expectedQuarter) && /初步|接洽/.test(input.stage)) {
-    level = '风险';
+    level = worse(level, '风险');
     reasons.push('本季度预计落单但仍处于早期阶段');
   }
-  if (reasons.length === 0) reasons.push(score >= 0.7 ? '阶段、赢单率和金额质量较好' : '阶段成熟度或赢单率偏低');
+  if (reasons.length === 0) {
+    reasons.push(score >= HEALTH_THRESHOLDS.healthy ? '阶段、赢单率和金额质量较好' : '阶段成熟度或赢单率偏低');
+  }
   return { score, level, reasons };
 }
 
@@ -220,7 +313,7 @@ function scoreCloseDate(value: string, stage: string) {
   if (Number.isNaN(date.getTime())) return 0.55;
   const days = (date.getTime() - Date.now()) / 86400000;
   if (days < 0) return /赢单|输单/.test(stage) ? 0.8 : 0.15;
-  if (days <= 90 && /初步|接洽/.test(stage)) return 0.25;
+  if (days <= EARLY_STAGE_DAYS && /初步|接洽/.test(stage)) return 0.25;
   return 0.85;
 }
 
@@ -229,9 +322,22 @@ function isExpired(value: string) {
   return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
 }
 
+/**
+ * 修复 M1 跨年脆弱判断：
+ * 原逻辑：quarter.includes(`Q${n}`) && quarter.includes(`Q${m}${year}`)
+ * 问题：当用户存的是 "Q1'26"（两位年份）时不匹配。
+ * 新逻辑：先用 inferQuarter 统一格式化为 "Q{1-4}'YYYY"，再比较。
+ */
 function isCurrentQuarter(quarter: string) {
+  if (!quarter) return false;
+  const normalized = quarter.includes("'")
+    ? quarter.replace(/'(\d{2})$/, "'20$1")  // 两位年份补全为四位
+    : quarter;
+  const canonical = inferQuarter(normalized.split("'")[0]);
+  if (!canonical) return false;
   const now = new Date();
-  return quarter.includes(`Q${Math.floor(now.getMonth() / 3) + 1}`) && quarter.includes(String(now.getFullYear()));
+  const current = `Q${Math.floor(now.getMonth() / 3) + 1}'${now.getFullYear()}`;
+  return canonical === current;
 }
 
 function worse(current: HealthLevel, next: HealthLevel): HealthLevel {
