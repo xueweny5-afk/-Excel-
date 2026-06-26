@@ -33,8 +33,12 @@ export function KeyCustomerView() {
             />
           </label>
           <div className="key-customer-actions">
-            <button className="button primary" onClick={() => setInput(input.trim())}>分析</button>
-            <button className="button ghost" onClick={() => setInput('')}>清空</button>
+            <button className="button primary" onClick={() => setInput(input.trim())}>
+              分析
+            </button>
+            <button className="button ghost" onClick={() => setInput('')}>
+              清空
+            </button>
             <button
               className="button primary"
               onClick={() => exportKeyCustomerCsv(analysis.matchedPplRows)}
@@ -45,11 +49,17 @@ export function KeyCustomerView() {
             </button>
           </div>
         </div>
-        <p className="key-customer-note">匹配顺序：标准化精确匹配 → 客户别名匹配 → 包含式模糊匹配。当前活动记录无客户维度，活动记录数暂不按客户统计。</p>
+        <p className="key-customer-note">
+          匹配顺序：标准化精确匹配 → 客户别名匹配 →
+          包含式模糊匹配。当前活动记录无客户维度，活动记录数暂不按客户统计。
+        </p>
       </section>
 
       {!hasInput ? (
-        <StatusCard title="请输入重点客户名单" description="每行一个客户名称，系统会匹配 PPL 明细并生成客户商机分析。" />
+        <StatusCard
+          title="请输入重点客户名单"
+          description="每行一个客户名称，系统会匹配 PPL 明细并生成客户商机分析。"
+        />
       ) : (
         <>
           <KeyCustomerKpis analysis={analysis} />

@@ -40,8 +40,16 @@ export function MatchResultCharts({ analysis }: MatchResultChartsProps) {
           </div>
         </div>
       </DashboardCard>
-      <ChartCard title="匹配方式分布" subtitle="按输入客户数量统计" option={countBarOption(matchTypeItems, true)} />
-      <ChartCard title="匹配置信度分布" subtitle="按置信度区间统计" option={countBarOption(confidenceItems, false)} />
+      <ChartCard
+        title="匹配方式分布"
+        subtitle="按输入客户数量统计"
+        option={countBarOption(matchTypeItems, true)}
+      />
+      <ChartCard
+        title="匹配置信度分布"
+        subtitle="按置信度区间统计"
+        option={countBarOption(confidenceItems, false)}
+      />
     </div>
   );
 }

@@ -23,7 +23,10 @@ export function HealthCard({ items, subtitle, onClick }: HealthCardProps) {
             <span className={`health-dot ${item.name}`} />
             <span className="health-name">{item.name}</span>
             <span className="health-track">
-              <span className={`health-fill ${item.name}`} style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }} />
+              <span
+                className={`health-fill ${item.name}`}
+                style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }}
+              />
             </span>
             <strong>{item.value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万</strong>
             <em>{item.count} 个</em>

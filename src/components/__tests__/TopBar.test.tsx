@@ -40,7 +40,9 @@ describe('TopBar', () => {
     const onUpload = vi.fn();
     render(<TopBar report={null} hasData={false} onUpload={onUpload} onClear={() => undefined} />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(['content'], 'data.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const file = new File(['content'], 'data.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     fireEvent.change(fileInput, { target: { files: [file] } });
     expect(onUpload).toHaveBeenCalledTimes(1);
     expect(onUpload).toHaveBeenCalledWith(file);
@@ -70,7 +72,9 @@ describe('TopBar', () => {
     const onUpload = vi.fn();
     render(<TopBar report={null} hasData={false} onUpload={onUpload} onClear={() => undefined} />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(['content'], 'same-name.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const file = new File(['content'], 'same-name.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     fireEvent.change(fileInput, { target: { files: [file] } });
     expect(fileInput.value).toBe('');
   });

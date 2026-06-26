@@ -8,7 +8,9 @@ export function InsightBanner({ insights }: InsightBannerProps) {
     <section className="insight-banner">
       <strong>经营洞察</strong>
       <div>
-        {insights.map((insight) => <span key={insight}>{insight}</span>)}
+        {insights.map((insight) => (
+          <span key={insight}>{insight}</span>
+        ))}
       </div>
     </section>
   );

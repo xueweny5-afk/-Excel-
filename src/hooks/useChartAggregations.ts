@@ -17,14 +17,17 @@ export interface ChartAggregations {
 }
 
 export function useChartAggregations(data: PPLRecord[]): ChartAggregations {
-  return useMemo(() => ({
-    owner: groupAmount(data, 'owner', 10),
-    industry: groupAmount(data, 'industryLevel1', 10),
-    product: groupAmount(data, 'product', 15),
-    quarter: groupAmount(data, 'expectedQuarter', 8).reverse(),
-    forecast: groupAmount(data, 'forecastType', 8),
-    health: healthSummary(data),
-  }), [data]);
+  return useMemo(
+    () => ({
+      owner: groupAmount(data, 'owner', 10),
+      industry: groupAmount(data, 'industryLevel1', 10),
+      product: groupAmount(data, 'product', 15),
+      quarter: groupAmount(data, 'expectedQuarter', 8).reverse(),
+      forecast: groupAmount(data, 'forecastType', 8),
+      health: healthSummary(data),
+    }),
+    [data],
+  );
 }
 
 function healthSummary(data: PPLRecord[]) {

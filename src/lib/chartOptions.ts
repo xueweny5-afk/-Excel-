@@ -57,7 +57,12 @@ export function axisCategory(data: string[], width?: number) {
     data,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: chartColors.textMuted, fontSize: 12, width, overflow: width ? 'truncate' as const : undefined },
+    axisLabel: {
+      color: chartColors.textMuted,
+      fontSize: 12,
+      width,
+      overflow: width ? ('truncate' as const) : undefined,
+    },
   };
 }
 
@@ -71,7 +76,11 @@ export function axisValue() {
   };
 }
 
-export function barOption(items: Array<{ name: string; value: number }>, horizontal = false, color: ChartColor = chartColors.primary) {
+export function barOption(
+  items: Array<{ name: string; value: number }>,
+  horizontal = false,
+  color: ChartColor = chartColors.primary,
+) {
   const displayItems = horizontal ? [...items].reverse() : items;
   const names = displayItems.map((item) => item.name);
   const values = displayItems.map((item) => item.value);
@@ -79,39 +88,50 @@ export function barOption(items: Array<{ name: string; value: number }>, horizon
     ...baseChart(),
     xAxis: horizontal ? axisValue() : axisCategory(names),
     yAxis: horizontal ? axisCategory(names, 120) : axisValue(),
-    series: [{
-      type: 'bar',
-      data: values.map((value, index) => ({
-        value,
-        itemStyle: { color: index === values.length - 1 && horizontal ? chartColors.primary : color, borderRadius: 6 },
-      })),
-      name: '金额(万元)',
-      barMaxWidth: 14,
-      label: {
-        show: true,
-        position: horizontal ? 'right' : 'top',
-        color: chartColors.textSecondary,
-        fontSize: 12,
-        formatter: ({ value }: { value: number }) => `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万`,
+    series: [
+      {
+        type: 'bar',
+        data: values.map((value, index) => ({
+          value,
+          itemStyle: {
+            color: index === values.length - 1 && horizontal ? chartColors.primary : color,
+            borderRadius: 6,
+          },
+        })),
+        name: '金额(万元)',
+        barMaxWidth: 14,
+        label: {
+          show: true,
+          position: horizontal ? 'right' : 'top',
+          color: chartColors.textSecondary,
+          fontSize: 12,
+          formatter: ({ value }: { value: number }) =>
+            `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万`,
+        },
       },
-    }],
+    ],
   };
 }
 
-export function donutOption(items: Array<{ name: string; value: number }>, palette: readonly string[] = DONUT_COLOR_PALETTE_LIST) {
+export function donutOption(
+  items: Array<{ name: string; value: number }>,
+  palette: readonly string[] = DONUT_COLOR_PALETTE_LIST,
+) {
   return {
     ...baseChart(),
     color: [...palette],
     legend: { show: false },
-    series: [{
-      type: 'pie',
-      radius: ['55%', '76%'],
-      center: ['50%', '52%'],
-      label: { show: false },
-      labelLine: { show: false },
-      data: items,
-      itemStyle: { borderColor: '#ffffff', borderWidth: 3 },
-    }],
+    series: [
+      {
+        type: 'pie',
+        radius: ['55%', '76%'],
+        center: ['50%', '52%'],
+        label: { show: false },
+        labelLine: { show: false },
+        data: items,
+        itemStyle: { borderColor: '#ffffff', borderWidth: 3 },
+      },
+    ],
   };
 }
 
@@ -122,8 +142,22 @@ export function quarterOption(items: Array<{ name: string; value: number; count:
     xAxis: axisCategory(items.map((item) => item.name)),
     yAxis: axisValue(),
     series: [
-      { type: 'bar', name: '金额(万元)', data: items.map((item) => item.value), barMaxWidth: 24, itemStyle: { color: chartColors.primary, borderRadius: 6 } },
-      { type: 'line', name: '商机数', data: items.map((item) => item.count), yAxisIndex: 0, smooth: true, symbolSize: 8, itemStyle: { color: chartColors.orange } },
+      {
+        type: 'bar',
+        name: '金额(万元)',
+        data: items.map((item) => item.value),
+        barMaxWidth: 24,
+        itemStyle: { color: chartColors.primary, borderRadius: 6 },
+      },
+      {
+        type: 'line',
+        name: '商机数',
+        data: items.map((item) => item.count),
+        yAxisIndex: 0,
+        smooth: true,
+        symbolSize: 8,
+        itemStyle: { color: chartColors.orange },
+      },
     ],
   };
 }
@@ -139,20 +173,22 @@ export function countBarOption(items: Array<{ name: string; value: number }>, ho
     ...baseChart(),
     xAxis: horizontal ? axisValue() : axisCategory(names),
     yAxis: horizontal ? axisCategory(names, 120) : axisValue(),
-    series: [{
-      type: 'bar',
-      data: values,
-      name: '商机数',
-      barMaxWidth: 14,
-      itemStyle: { color: chartColors.cyanLight, borderRadius: 4 },
-      label: {
-        show: true,
-        position: horizontal ? 'right' : 'top',
-        color: chartColors.textSecondary,
-        fontSize: 12,
-        formatter: ({ value }: { value: number }) => `${value.toLocaleString('zh-CN')} 个`,
+    series: [
+      {
+        type: 'bar',
+        data: values,
+        name: '商机数',
+        barMaxWidth: 14,
+        itemStyle: { color: chartColors.cyanLight, borderRadius: 4 },
+        label: {
+          show: true,
+          position: horizontal ? 'right' : 'top',
+          color: chartColors.textSecondary,
+          fontSize: 12,
+          formatter: ({ value }: { value: number }) => `${value.toLocaleString('zh-CN')} 个`,
+        },
       },
-    }],
+    ],
   };
 }
 

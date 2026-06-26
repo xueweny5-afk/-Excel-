@@ -1,8 +1,24 @@
 import type { PPLRecord } from './domain';
 
-export const PPL_FIELD_ALIASES: Record<keyof Pick<PPLRecord,
-  'owner' | 'customerName' | 'opportunityName' | 'industryLevel1' | 'industryLevel2' | 'product' | 'amount' | 'stage' | 'status' | 'winRate' | 'forecastType' | 'expectedCloseDate' | 'expectedQuarter'
->, string[]> = {
+export const PPL_FIELD_ALIASES: Record<
+  keyof Pick<
+    PPLRecord,
+    | 'owner'
+    | 'customerName'
+    | 'opportunityName'
+    | 'industryLevel1'
+    | 'industryLevel2'
+    | 'product'
+    | 'amount'
+    | 'stage'
+    | 'status'
+    | 'winRate'
+    | 'forecastType'
+    | 'expectedCloseDate'
+    | 'expectedQuarter'
+  >,
+  string[]
+> = {
   owner: ['Pipeline所有人', '销售', '负责人', '商机负责人'],
   customerName: ['客户名称', '客户', '公司名称', '最终客户'],
   opportunityName: ['商机项目名称', '商机名称', '项目名称', '机会点'],

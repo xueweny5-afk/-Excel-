@@ -27,17 +27,15 @@ export function TopBar({ report, hasData, onUpload, onClear }: TopBarProps) {
       <div className="header-meta">
         <span>当前文件：{report?.fileName ?? '未导入文件'}</span>
         <span>导入时间：{report?.importedAt ?? '-'}</span>
-        <span>数据范围：PPL {report?.pplRows ?? 0} 条 / 活动 {report?.activityRows ?? 0} 条</span>
+        <span>
+          数据范围：PPL {report?.pplRows ?? 0} 条 / 活动 {report?.activityRows ?? 0} 条
+        </span>
       </div>
       <div className="topbar-actions">
         <label className="button primary">
           <Upload size={16} />
           重新上传
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleChange}
-          />
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={handleChange} />
         </label>
         <button className="button ghost" onClick={onClear} disabled={!hasData}>
           <RotateCcw size={16} />

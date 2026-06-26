@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PPLRecord } from '../../domain';
-import {
-  aggregatePpl,
-  calculateKpis,
-  filterPpl,
-  groupAmount,
-  uniqueOptions,
-} from '../analyzer';
+import { aggregatePpl, calculateKpis, filterPpl, groupAmount, uniqueOptions } from '../analyzer';
 import { normalizeCustomerName } from '../normalize';
 
 function makePpl(overrides: Partial<PPLRecord> = {}): PPLRecord {
@@ -59,13 +53,7 @@ describe('filterPpl', () => {
   });
 
   it('should_apply_drill_filter', () => {
-    const result = filterPpl(
-      data,
-      {},
-      [{ field: 'owner', value: '李四' }],
-      '',
-      '',
-    );
+    const result = filterPpl(data, {}, [{ field: 'owner', value: '李四' }], '', '');
     expect(result).toHaveLength(1);
   });
 
@@ -154,9 +142,7 @@ describe('groupAmount', () => {
   });
 
   it('should_treat_empty_field_as_未填写', () => {
-    const data: PPLRecord[] = [
-      makePpl({ id: 'a', owner: '' }),
-    ];
+    const data: PPLRecord[] = [makePpl({ id: 'a', owner: '' })];
     const groups = groupAmount(data, 'owner', 10);
     expect(groups[0].name).toBe('未填写');
   });
@@ -216,10 +202,7 @@ describe('uniqueOptions', () => {
   });
 
   it('should_filter_empty_strings', () => {
-    const data: PPLRecord[] = [
-      makePpl({ id: 'a', product: '' }),
-      makePpl({ id: 'b', product: 'X' }),
-    ];
+    const data: PPLRecord[] = [makePpl({ id: 'a', product: '' }), makePpl({ id: 'b', product: 'X' })];
     expect(uniqueOptions(data, 'product')).toEqual(['X']);
   });
 });

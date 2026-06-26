@@ -17,11 +17,7 @@ export function TabBar({ rightSlot }: { rightSlot?: ReactNode }) {
   return (
     <nav className="tabs">
       {TAB_LIST.map(({ key, label }) => (
-        <button
-          key={key}
-          className={activeTab === key ? 'active' : ''}
-          onClick={() => setActiveTab(key)}
-        >
+        <button key={key} className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>
           {label}
         </button>
       ))}

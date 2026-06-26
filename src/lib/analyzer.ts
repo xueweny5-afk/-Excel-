@@ -24,20 +24,32 @@ export interface AggregatedPplRow {
   riskCount: number;
 }
 
-export function filterPpl(data: PPLRecord[], filters: Partial<Filters>, drillFilters: DrillFilter[], search: string, customerQuery = '') {
+export function filterPpl(
+  data: PPLRecord[],
+  filters: Partial<Filters>,
+  drillFilters: DrillFilter[],
+  search: string,
+  customerQuery = '',
+) {
   const keyword = search.trim().toLowerCase();
   const customerTerms = parseCustomerTerms(customerQuery);
   return data.filter((row) => {
-    const manualOk = (!filters.owner || row.owner === filters.owner)
-      && (!filters.industryLevel1 || row.industryLevel1 === filters.industryLevel1)
-      && (!filters.product || row.product === filters.product)
-      && (!filters.expectedQuarter || row.expectedQuarter === filters.expectedQuarter)
-      && (!filters.status || row.status === filters.status)
-      && (!filters.forecastType || row.forecastType === filters.forecastType);
+    const manualOk =
+      (!filters.owner || row.owner === filters.owner) &&
+      (!filters.industryLevel1 || row.industryLevel1 === filters.industryLevel1) &&
+      (!filters.product || row.product === filters.product) &&
+      (!filters.expectedQuarter || row.expectedQuarter === filters.expectedQuarter) &&
+      (!filters.status || row.status === filters.status) &&
+      (!filters.forecastType || row.forecastType === filters.forecastType);
     const drillOk = drillFilters.every((filter) => String(row[filter.field]) === filter.value);
-    const searchOk = !keyword || [row.owner, row.customerName, row.opportunityName, row.product, row.industryLevel1]
-      .some((value) => value.toLowerCase().includes(keyword));
-    const customerOk = customerTerms.length === 0 || customerTerms.some((term) => normalizeCustomerName(row.customerName).includes(term));
+    const searchOk =
+      !keyword ||
+      [row.owner, row.customerName, row.opportunityName, row.product, row.industryLevel1].some((value) =>
+        value.toLowerCase().includes(keyword),
+      );
+    const customerOk =
+      customerTerms.length === 0 ||
+      customerTerms.some((term) => normalizeCustomerName(row.customerName).includes(term));
     return manualOk && drillOk && searchOk && customerOk;
   });
 }
@@ -50,7 +62,11 @@ export function calculateKpis(data: PPLRecord[]) {
     totalAmount,
     customerCount: new Set(data.map((row) => normalizeCustomerName(row.customerName)).filter(Boolean)).size,
     weightedWinRate,
-    forecastAmount: sum(data.filter((row) => row.forecastType === 'Commit' || row.forecastType === 'Best Case').map((row) => row.amount)),
+    forecastAmount: sum(
+      data
+        .filter((row) => row.forecastType === 'Commit' || row.forecastType === 'Best Case')
+        .map((row) => row.amount),
+    ),
     riskCount: data.filter((row) => row.healthLevel === '风险').length,
   };
 }
@@ -71,7 +87,9 @@ export function groupAmount(data: PPLRecord[], field: keyof PPLRecord, limit = 1
 }
 
 export function uniqueOptions(data: PPLRecord[], field: keyof PPLRecord) {
-  return Array.from(new Set(data.map((row) => String(row[field] || '')).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  return Array.from(new Set(data.map((row) => String(row[field] || '')).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'zh-CN'),
+  );
 }
 
 export function aggregatePpl(rows: PPLRecord[]): AggregatedPplRow[] {
@@ -95,7 +113,8 @@ export function aggregatePpl(rows: PPLRecord[]): AggregatedPplRow[] {
     current.opportunityCount += 1;
     current.totalAmount += row.amount;
     current.weightedAmount += row.amount * row.winRate;
-    current.forecastAmount += row.forecastType === 'Commit' || row.forecastType === 'Best Case' ? row.amount : 0;
+    current.forecastAmount +=
+      row.forecastType === 'Commit' || row.forecastType === 'Best Case' ? row.amount : 0;
     current.riskCount += row.healthLevel === '风险' ? 1 : 0;
     current.ownerSet.add(row.owner);
     map.set(key, current);
@@ -111,14 +130,27 @@ export function aggregatePpl(rows: PPLRecord[]): AggregatedPplRow[] {
 }
 
 export function exportCsv(rows: PPLRecord[]) {
-  const headers = ['销售', '客户名称', '商机名称', '一级行业', '产品', '金额(万元)', '销售阶段', '赢单率', 'Forecast', '预计落单季度', '健康度', '状态'];
+  const headers = [
+    '销售',
+    '客户名称',
+    '商机名称',
+    '一级行业',
+    '产品',
+    '金额(万元)',
+    '销售阶段',
+    '赢单率',
+    'Forecast',
+    '预计落单季度',
+    '健康度',
+    '状态',
+  ];
   const body = rows.map((row) => [
     row.owner,
     row.customerName,
     row.opportunityName,
     row.industryLevel1,
     row.product,
-    row.amount.toFixed(1),  // L 修复：CSV 数字精度统一
+    row.amount.toFixed(1), // L 修复：CSV 数字精度统一
     row.stage,
     row.winRate.toFixed(2),
     row.forecastType,
@@ -130,7 +162,18 @@ export function exportCsv(rows: PPLRecord[]) {
 }
 
 export function exportAggregationCsv(rows: AggregatedPplRow[]) {
-  const headers = ['客户名称', '一级行业', '产品', '销售阶段', '销售', '商机数', '金额合计(万元)', '加权赢单率', 'Forecast金额(万元)', '风险商机数'];
+  const headers = [
+    '客户名称',
+    '一级行业',
+    '产品',
+    '销售阶段',
+    '销售',
+    '商机数',
+    '金额合计(万元)',
+    '加权赢单率',
+    'Forecast金额(万元)',
+    '风险商机数',
+  ];
   const body = rows.map((row) => [
     row.customerName,
     row.industryLevel1,
@@ -148,7 +191,8 @@ export function exportAggregationCsv(rows: AggregatedPplRow[]) {
 
 export function downloadCsv(lines: unknown[][], fileName: string) {
   const csv = lines.map((line) => line.map(escapeCsv).join(',')).join('\n');
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' });
+  // BOM 让 Excel 识别 UTF-8 中文
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

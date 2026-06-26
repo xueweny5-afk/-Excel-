@@ -78,10 +78,7 @@ describe('matchCustomers', () => {
 
   it('should_sort_candidates_by_total_amount_descending', () => {
     // 即使 PPL 中有多家匹配，priority 高的（金额大）先返回
-    const records = [
-      makePpl('某银行', 100),
-      makePpl('某银行股份有限公司', 500),
-    ];
+    const records = [makePpl('某银行', 100), makePpl('某银行股份有限公司', 500)];
     const result = matchCustomers(['某银行'], records);
     expect(result[0].matchedCustomerName).toBe('某银行股份有限公司');
   });

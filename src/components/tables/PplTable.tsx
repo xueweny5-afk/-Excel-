@@ -7,6 +7,7 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   type SortingState,
+  type Table,
   useReactTable,
 } from '@tanstack/react-table';
 import type { PPLRecord } from '../../domain';
@@ -41,12 +42,20 @@ export function PplTable({ rows }: { rows: PPLRecord[] }) {
       <div className="section-title">
         <div className="table-heading">
           <h2>{mode === 'aggregate' ? 'PPL 聚合统计' : 'PPL 明细表'}</h2>
-          <span>{mode === 'aggregate' ? `${aggregatePpl(rows).length} 组 / ${rows.length} 条明细` : `${rows.length} 条明细`}</span>
+          <span>
+            {mode === 'aggregate'
+              ? `${aggregatePpl(rows).length} 组 / ${rows.length} 条明细`
+              : `${rows.length} 条明细`}
+          </span>
         </div>
         <div className="table-actions">
           <div className="segment">
-            <button className={mode === 'aggregate' ? 'active' : ''} onClick={() => switchMode('aggregate')}>聚合统计</button>
-            <button className={mode === 'detail' ? 'active' : ''} onClick={() => switchMode('detail')}>明细数据</button>
+            <button className={mode === 'aggregate' ? 'active' : ''} onClick={() => switchMode('aggregate')}>
+              聚合统计
+            </button>
+            <button className={mode === 'detail' ? 'active' : ''} onClick={() => switchMode('detail')}>
+              明细数据
+            </button>
           </div>
           <button className="button primary" onClick={handleExport}>
             <Download size={16} />
@@ -54,7 +63,11 @@ export function PplTable({ rows }: { rows: PPLRecord[] }) {
           </button>
         </div>
       </div>
-      {mode === 'aggregate' ? <AggregateTable rows={rows} /> : <DetailTable rows={rows} onSelect={setSelected} />}
+      {mode === 'aggregate' ? (
+        <AggregateTable rows={rows} />
+      ) : (
+        <DetailTable rows={rows} onSelect={setSelected} />
+      )}
       {selected && <DetailDrawer row={selected} onClose={() => setSelected(null)} />}
     </section>
   );
@@ -65,19 +78,35 @@ function AggregateTable({ rows }: { rows: PPLRecord[] }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'totalAmount', desc: true }]);
   const data = useMemo(() => aggregatePpl(rows), [rows]);
 
-  const columns = useMemo<ColumnDef<AggregatedPplRow>[]>(() => [
-    { accessorKey: 'customerName', header: '客户名称' },
-    { accessorKey: 'industryLevel1', header: '一级行业' },
-    { accessorKey: 'product', header: '产品' },
-    { accessorKey: 'stage', header: '销售阶段' },
-    { accessorKey: 'owners', header: '销售' },
-    { accessorKey: 'opportunityCount', header: '商机数' },
-    { accessorKey: 'totalAmount', header: '金额合计(万元)', cell: (info) => formatMoney(Number(info.getValue())) },
-    { accessorKey: 'weightedWinRate', header: '加权赢单率', cell: (info) => formatPercent(Number(info.getValue())) },
-    { accessorKey: 'forecastAmount', header: 'Forecast金额(万元)', cell: (info) => formatMoney(Number(info.getValue())) },
-    { accessorKey: 'riskCount', header: '风险数' },
-  ], []);
+  const columns = useMemo<ColumnDef<AggregatedPplRow>[]>(
+    () => [
+      { accessorKey: 'customerName', header: '客户名称' },
+      { accessorKey: 'industryLevel1', header: '一级行业' },
+      { accessorKey: 'product', header: '产品' },
+      { accessorKey: 'stage', header: '销售阶段' },
+      { accessorKey: 'owners', header: '销售' },
+      { accessorKey: 'opportunityCount', header: '商机数' },
+      {
+        accessorKey: 'totalAmount',
+        header: '金额合计(万元)',
+        cell: (info) => formatMoney(Number(info.getValue())),
+      },
+      {
+        accessorKey: 'weightedWinRate',
+        header: '加权赢单率',
+        cell: (info) => formatPercent(Number(info.getValue())),
+      },
+      {
+        accessorKey: 'forecastAmount',
+        header: 'Forecast金额(万元)',
+        cell: (info) => formatMoney(Number(info.getValue())),
+      },
+      { accessorKey: 'riskCount', header: '风险数' },
+    ],
+    [],
+  );
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
@@ -94,21 +123,29 @@ function AggregateTable({ rows }: { rows: PPLRecord[] }) {
 /* ========== 子组件：明细表 ========== */
 function DetailTable({ rows, onSelect }: { rows: PPLRecord[]; onSelect: (row: PPLRecord) => void }) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const columns = useMemo<ColumnDef<PPLRecord>[]>(() => [
-    { accessorKey: 'owner', header: '销售' },
-    { accessorKey: 'customerName', header: '客户名称' },
-    { accessorKey: 'opportunityName', header: '商机名称' },
-    { accessorKey: 'industryLevel1', header: '一级行业' },
-    { accessorKey: 'product', header: '产品' },
-    { accessorKey: 'amount', header: '金额(万元)', cell: (info) => formatMoney(Number(info.getValue())) },
-    { accessorKey: 'stage', header: '销售阶段' },
-    { accessorKey: 'winRate', header: '赢单率', cell: (info) => formatPercent(Number(info.getValue())) },
-    { accessorKey: 'forecastType', header: 'Forecast' },
-    { accessorKey: 'expectedQuarter', header: '季度' },
-    { accessorKey: 'healthLevel', header: '健康度', cell: (info) => <span className={`health ${info.getValue()}`}>{String(info.getValue())}</span> },
-    { accessorKey: 'status', header: '状态' },
-  ], []);
+  const columns = useMemo<ColumnDef<PPLRecord>[]>(
+    () => [
+      { accessorKey: 'owner', header: '销售' },
+      { accessorKey: 'customerName', header: '客户名称' },
+      { accessorKey: 'opportunityName', header: '商机名称' },
+      { accessorKey: 'industryLevel1', header: '一级行业' },
+      { accessorKey: 'product', header: '产品' },
+      { accessorKey: 'amount', header: '金额(万元)', cell: (info) => formatMoney(Number(info.getValue())) },
+      { accessorKey: 'stage', header: '销售阶段' },
+      { accessorKey: 'winRate', header: '赢单率', cell: (info) => formatPercent(Number(info.getValue())) },
+      { accessorKey: 'forecastType', header: 'Forecast' },
+      { accessorKey: 'expectedQuarter', header: '季度' },
+      {
+        accessorKey: 'healthLevel',
+        header: '健康度',
+        cell: (info) => <span className={`health ${info.getValue()}`}>{String(info.getValue())}</span>,
+      },
+      { accessorKey: 'status', header: '状态' },
+    ],
+    [],
+  );
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -126,8 +163,8 @@ function DetailTable({ rows, onSelect }: { rows: PPLRecord[]; onSelect: (row: PP
  * 共享表格渲染器：消除两个子组件的重复 JSX。
  * 泛型 T 仅用于 cell context 类型推断，渲染时统一为 any。
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function TableBody<T>({ table, onRowClick }: { table: import('@tanstack/react-table').Table<T>; onRowClick?: (row: T) => void }) {
+
+function TableBody<T>({ table, onRowClick }: { table: Table<T>; onRowClick?: (row: T) => void }) {
   return (
     <>
       <div className="table-wrap">
@@ -145,10 +182,7 @@ function TableBody<T>({ table, onRowClick }: { table: import('@tanstack/react-ta
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-              >
+              <tr key={row.id} onClick={onRowClick ? () => onRowClick(row.original) : undefined}>
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                 ))}
@@ -158,9 +192,15 @@ function TableBody<T>({ table, onRowClick }: { table: import('@tanstack/react-ta
         </table>
       </div>
       <div className="pager">
-        <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>上一页</button>
-        <span>第 {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} 页</span>
-        <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>下一页</button>
+        <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+          上一页
+        </button>
+        <span>
+          第 {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} 页
+        </span>
+        <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+          下一页
+        </button>
       </div>
     </>
   );

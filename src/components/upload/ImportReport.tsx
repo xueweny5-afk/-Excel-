@@ -20,7 +20,7 @@ export function ImportReportPanel({ report }: ImportReportPanelProps) {
         <strong>字段识别</strong>
         <span>{fields}</span>
       </div>
-      {(hints.length > 0) && (
+      {hints.length > 0 && (
         <div>
           <strong>提示</strong>
           <span>{hints.join('；')}</span>

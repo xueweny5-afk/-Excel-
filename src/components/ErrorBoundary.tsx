@@ -33,15 +33,17 @@ export class ErrorBoundary extends Component<Props, State> {
         <div style={{ padding: 32, maxWidth: 720, margin: '40px auto' }}>
           <h2 style={{ color: '#b91c1c' }}>页面出错了</h2>
           <p style={{ color: '#6b7280' }}>工具出现异常，部分功能可能不可用。请刷新页面或重新上传文件。</p>
-          <pre style={{
-            marginTop: 16,
-            padding: 12,
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: 8,
-            overflow: 'auto',
-            fontSize: 12,
-          }}>
+          <pre
+            style={{
+              marginTop: 16,
+              padding: 12,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 8,
+              overflow: 'auto',
+              fontSize: 12,
+            }}
+          >
             {this.state.error?.message}
           </pre>
           <button

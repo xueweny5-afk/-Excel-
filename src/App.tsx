@@ -42,19 +42,22 @@ export default function App() {
   const { filteredPpl, rawPpl, kpis } = useFilteredPpl();
   const dragHandlers = useFileDrop();
 
-  const handleFile = useCallback(async (file: File) => {
-    setDragging(false);
-    setLoading(true);
-    setError('');
-    try {
-      const parsed = await parseDashboardFile(file);
-      setData(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '文件解析失败，请检查格式和表头。');
-    } finally {
-      setLoading(false);
-    }
-  }, [setData, setDragging, setError, setLoading]);
+  const handleFile = useCallback(
+    async (file: File) => {
+      setDragging(false);
+      setLoading(true);
+      setError('');
+      try {
+        const parsed = await parseDashboardFile(file);
+        setData(parsed);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '文件解析失败，请检查格式和表头。');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setData, setDragging, setError, setLoading],
+  );
 
   // 监听 useFileDrop 派发的全局事件
   useEffect(() => {
@@ -76,14 +79,11 @@ export default function App() {
       onDragLeave={dragHandlers.handleDragLeave}
       onDrop={dragHandlers.handleDrop}
     >
-      <TopBar
-        report={data?.report ?? null}
-        hasData={!!data}
-        onUpload={handleFile}
-        onClear={clearData}
-      />
+      <TopBar report={data?.report ?? null} hasData={!!data} onUpload={handleFile} onClear={clearData} />
 
-      {loading && <StatusCard title="正在解析 Excel..." description="正在识别 Sheet、清洗字段并生成分析结果。" />}
+      {loading && (
+        <StatusCard title="正在解析 Excel..." description="正在识别 Sheet、清洗字段并生成分析结果。" />
+      )}
       {error && <StatusCard tone="danger" title="文件解析失败" description={error} />}
       {!data && !loading && !error && <FileDropZone />}
 

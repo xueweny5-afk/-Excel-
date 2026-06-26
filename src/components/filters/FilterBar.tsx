@@ -44,13 +44,12 @@ export function FilterBar({ data, resultSummary }: FilterBarProps) {
         {FILTER_CONFIG.map(({ key, field, label }) => (
           <label key={key}>
             <span>{label}</span>
-            <select
-              value={filters[key]}
-              onChange={(event) => setFilter(key, event.target.value)}
-            >
+            <select value={filters[key]} onChange={(event) => setFilter(key, event.target.value)}>
               <option value="">全部</option>
               {uniqueOptions(data, field).map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option} value={option}>
+                  {option}
+                </option>
               ))}
             </select>
           </label>

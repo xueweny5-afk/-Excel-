@@ -122,7 +122,9 @@ function matchOne(inputName: string, candidates: CustomerCandidate[]): CustomerM
   // 3. 模糊匹配：归一化后双向包含
   const fuzzy = candidates.find((candidate) => {
     if (!normalizedInput || !candidate.normalizedName) return false;
-    return candidate.normalizedName.includes(normalizedInput) || normalizedInput.includes(candidate.normalizedName);
+    return (
+      candidate.normalizedName.includes(normalizedInput) || normalizedInput.includes(candidate.normalizedName)
+    );
   });
   if (fuzzy) return result(inputName, normalizedInput, fuzzy.customerName, '模糊匹配', CONFIDENCE.fuzzy);
 
@@ -136,7 +138,13 @@ function matchOne(inputName: string, candidates: CustomerCandidate[]): CustomerM
   };
 }
 
-function result(inputName: string, normalizedInput: string, matchedCustomerName: string, matchType: CustomerMatchType, confidence: number): CustomerMatchResult {
+function result(
+  inputName: string,
+  normalizedInput: string,
+  matchedCustomerName: string,
+  matchType: CustomerMatchType,
+  confidence: number,
+): CustomerMatchResult {
   return {
     inputName,
     normalizedInput,

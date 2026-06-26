@@ -1,5 +1,12 @@
 import * as XLSX from 'xlsx';
-import type { ActivityRecord, DashboardData, ForecastType, HealthLevel, PPLRecord, SummaryRecord } from '../domain';
+import type {
+  ActivityRecord,
+  DashboardData,
+  ForecastType,
+  HealthLevel,
+  PPLRecord,
+  SummaryRecord,
+} from '../domain';
 import { PPL_FIELD_ALIASES, REQUIRED_PPL_FIELDS } from '../fieldAliases';
 
 type Row = Record<string, unknown>;
@@ -15,12 +22,20 @@ const MAX_COLS = 200;
  * 覆盖 JS 内置危险属性、Object.prototype 方法、Symbol 注入等。
  */
 const DANGEROUS_KEYS = new Set([
-  '__proto__', 'constructor', 'prototype',
-  'valueOf', 'hasOwnProperty', 'toString',
-  '__defineGetter__', '__defineSetter__',
-  '__lookupGetter__', '__lookupSetter__',
-  '__proto__', '__noSuchMethod__',
-  'isPrototypeOf', 'propertyIsEnumerable',
+  '__proto__',
+  'constructor',
+  'prototype',
+  'valueOf',
+  'hasOwnProperty',
+  'toString',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  '__proto__',
+  '__noSuchMethod__',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
 ]);
 
 // ========== 健康度算法常量 ==========
@@ -78,7 +93,8 @@ export async function parseDashboardFile(file: File): Promise<DashboardData> {
     const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: '', raw: false });
     if (rows.length > MAX_ROWS) throw new Error(`${sheetName} 超过 ${MAX_ROWS} 行，请拆分后再导入。`);
     const first = rows[0] ?? {};
-    if (Object.keys(first).length > MAX_COLS) throw new Error(`${sheetName} 超过 ${MAX_COLS} 列，请清理无关列后再导入。`);
+    if (Object.keys(first).length > MAX_COLS)
+      throw new Error(`${sheetName} 超过 ${MAX_COLS} 列，请清理无关列后再导入。`);
     acc[sheetName] = rows.map(sanitizeRow);
     return acc;
   }, {});
@@ -140,7 +156,7 @@ function validateFile(file: File) {
   }
 }
 
-function sanitizeRow(row: Row): Row {
+export function sanitizeRow(row: Row): Row {
   return Object.entries(row).reduce<Row>((acc, [key, value]) => {
     if (DANGEROUS_KEYS.has(key)) return acc;
     const cleanKey = String(key).trim();
@@ -157,17 +173,24 @@ function findSheet(sheetNames: string[], candidates: string[]) {
 function mapFields(row: Row) {
   const headers = Object.keys(row);
   return Object.entries(PPL_FIELD_ALIASES).reduce<Record<string, string>>((acc, [field, aliases]) => {
-    const match = headers.find((header) => aliases.some((alias) => normalizeHeader(header) === normalizeHeader(alias)));
+    const match = headers.find((header) =>
+      aliases.some((alias) => normalizeHeader(header) === normalizeHeader(alias)),
+    );
     if (match) acc[field] = match;
     return acc;
   }, {});
 }
 
-function normalizeHeader(value: string) {
+export function normalizeHeader(value: string) {
   return value.replace(/\s/g, '').toLowerCase();
 }
 
-function normalizePpl(row: Row, fieldMap: Record<string, string>, rowNumber: number, warnings: string[]): PPLRecord | null {
+function normalizePpl(
+  row: Row,
+  fieldMap: Record<string, string>,
+  rowNumber: number,
+  warnings: string[],
+): PPLRecord | null {
   const owner = readString(row, fieldMap.owner);
   const customerName = readString(row, fieldMap.customerName);
   const opportunityName = readString(row, fieldMap.opportunityName);
@@ -180,7 +203,15 @@ function normalizePpl(row: Row, fieldMap: Record<string, string>, rowNumber: num
   const stage = readString(row, fieldMap.stage) || 'Unknown';
   const status = readString(row, fieldMap.status) || 'Unknown';
   const winRate = parseRate(row[fieldMap.winRate]);
-  const health = scoreHealth({ amount, winRate, stage, status, expectedCloseDate, customerName, expectedQuarter });
+  const health = scoreHealth({
+    amount,
+    winRate,
+    stage,
+    status,
+    expectedCloseDate,
+    customerName,
+    expectedQuarter,
+  });
 
   return {
     id: buildRecordId(rowNumber, owner, customerName, opportunityName),
@@ -208,7 +239,12 @@ function normalizePpl(row: Row, fieldMap: Record<string, string>, rowNumber: num
  * 构造稳定 ID：以原始行号 + 业务字段组合。
  * 即便下游筛选/排序变化，ID 仍能稳定标识同一条记录。
  */
-function buildRecordId(rowNumber: number, owner: string, customer: string, opportunity: string): string {
+export function buildRecordId(
+  rowNumber: number,
+  owner: string,
+  customer: string,
+  opportunity: string,
+): string {
   return [rowNumber, owner, customer, opportunity].join(ID_SEPARATOR);
 }
 
@@ -216,7 +252,7 @@ function readString(row: Row, key?: string) {
   return key ? String(row[key] ?? '').trim() : '';
 }
 
-function parseAmount(value: unknown) {
+export function parseAmount(value: unknown) {
   if (value === null || value === undefined || value === '') return 0;
   const text = String(value).replace(/,/g, '').trim();
   const numeric = Number(text.replace(/[^\d.-]/g, ''));
@@ -233,7 +269,7 @@ function parseAmount(value: unknown) {
  * "1.5"（100%+）误判成百分比 → 0.015。
  * 新规则：只有显式包含 `%` 才视为百分比字符串，否则按原样作为 0-1 小数。
  */
-function parseRate(value: unknown) {
+export function parseRate(value: unknown) {
   if (value === null || value === undefined || value === '') return 0;
   const text = String(value).trim();
   const numeric = Number(text.replace('%', ''));
@@ -241,7 +277,7 @@ function parseRate(value: unknown) {
   return text.includes('%') ? numeric / 100 : numeric;
 }
 
-function parseForecast(value: unknown): ForecastType {
+export function parseForecast(value: unknown): ForecastType {
   const text = String(value ?? '').toLowerCase();
   if (text.includes('commit') || text.includes('是') || text.includes('确认')) return 'Commit';
   if (text.includes('best')) return 'Best Case';
@@ -275,11 +311,8 @@ function scoreHealth(input: {
   const amountQualityScore = input.amount <= 0 ? 0 : input.amount > LARGE_AMOUNT ? 0.65 : 1;
   const score = stageScore * 0.4 + input.winRate * 0.3 + closeDateScore * 0.2 + amountQualityScore * 0.1;
   const reasons: string[] = [];
-  let level: HealthLevel = score >= HEALTH_THRESHOLDS.healthy
-    ? '健康'
-    : score >= HEALTH_THRESHOLDS.watch
-      ? '关注'
-      : '风险';
+  let level: HealthLevel =
+    score >= HEALTH_THRESHOLDS.healthy ? '健康' : score >= HEALTH_THRESHOLDS.watch ? '关注' : '风险';
 
   // H3 修复：所有降级统一走 worse()，避免直接赋值绕过已有等级
   if (input.amount <= 0) {
@@ -303,7 +336,9 @@ function scoreHealth(input: {
     reasons.push('本季度预计落单但仍处于早期阶段');
   }
   if (reasons.length === 0) {
-    reasons.push(score >= HEALTH_THRESHOLDS.healthy ? '阶段、赢单率和金额质量较好' : '阶段成熟度或赢单率偏低');
+    reasons.push(
+      score >= HEALTH_THRESHOLDS.healthy ? '阶段、赢单率和金额质量较好' : '阶段成熟度或赢单率偏低',
+    );
   }
   return { score, level, reasons };
 }
@@ -331,7 +366,7 @@ function isExpired(value: string) {
 function isCurrentQuarter(quarter: string) {
   if (!quarter) return false;
   const normalized = quarter.includes("'")
-    ? quarter.replace(/'(\d{2})$/, "'20$1")  // 两位年份补全为四位
+    ? quarter.replace(/'(\d{2})$/, "'20$1") // 两位年份补全为四位
     : quarter;
   const canonical = inferQuarter(normalized.split("'")[0]);
   if (!canonical) return false;
@@ -349,13 +384,15 @@ function parseSummary(rows: Row[]): SummaryRecord[] {
   return rows.flatMap((row) => {
     const owner = String(row['销售'] ?? '').trim();
     if (!owner || owner.includes('汇总')) return [];
-    return [{
-      team: String(row['团队'] ?? '未分组'),
-      owner,
-      totalAmount: parseAmount(row['PPL总额']),
-      forecastAmount: parseAmount(row['Q2FC']),
-      raw: row,
-    }];
+    return [
+      {
+        team: String(row['团队'] ?? '未分组'),
+        owner,
+        totalAmount: parseAmount(row['PPL总额']),
+        forecastAmount: parseAmount(row['Q2FC']),
+        raw: row,
+      },
+    ];
   });
 }
 
@@ -365,7 +402,15 @@ function parseActivity(rows: Row[]): ActivityRecord[] {
     if (!owner) return [];
     const newPplAmount = parseAmount(row['求和项:预计合同金额(万元)']);
     const activityCount = Number(row['活动记录数量（本周）'] ?? row['汇总'] ?? 0) || 0;
-    return [{ owner, newPplAmount, activityCount, conversionRate: activityCount ? newPplAmount / activityCount : 0, raw: row }];
+    return [
+      {
+        owner,
+        newPplAmount,
+        activityCount,
+        conversionRate: activityCount ? newPplAmount / activityCount : 0,
+        raw: row,
+      },
+    ];
   });
 }
 

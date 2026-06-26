@@ -20,12 +20,7 @@ export function ChartCard({ title, subtitle, option, onClick, height = 300 }: Ch
 
   return (
     <DashboardCard title={title} subtitle={subtitle}>
-      <EChartsReact
-        option={option}
-        style={{ height }}
-        onEvents={events}
-        notMerge
-      />
+      <EChartsReact option={option} style={{ height }} onEvents={events} notMerge />
     </DashboardCard>
   );
 }

@@ -17,15 +17,19 @@ export function SimpleRecords({ title, rows }: SimpleRecordsProps) {
         <table>
           <thead>
             <tr>
-              {columns.map((key) => <th key={key}>{key}</th>)}
+              {columns.map((key) => (
+                <th key={key}>{key}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.slice(0, 80).map((row, index) => (
               <tr key={index}>
-                {Object.values(row.raw).slice(0, 10).map((value, idx) => (
-                  <td key={idx}>{String(value ?? '')}</td>
-                ))}
+                {Object.values(row.raw)
+                  .slice(0, 10)
+                  .map((value, idx) => (
+                    <td key={idx}>{String(value ?? '')}</td>
+                  ))}
               </tr>
             ))}
           </tbody>

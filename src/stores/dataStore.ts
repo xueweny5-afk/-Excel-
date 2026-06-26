@@ -78,7 +78,15 @@ export const useDataStore = create<DataStore>((set) => ({
       keyCustomerInput: '',
       error: '',
     }),
-  clearData: () => set({ data: null, filters: emptyFilters, drillFilters: [], search: '', customerQuery: '', keyCustomerInput: '' }),
+  clearData: () =>
+    set({
+      data: null,
+      filters: emptyFilters,
+      drillFilters: [],
+      search: '',
+      customerQuery: '',
+      keyCustomerInput: '',
+    }),
 
   setFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
@@ -91,8 +99,7 @@ export const useDataStore = create<DataStore>((set) => ({
           : [...s.drillFilters, { field, value }],
       };
     }),
-  removeDrill: (filter) =>
-    set((s) => ({ drillFilters: s.drillFilters.filter((f) => f !== filter) })),
+  removeDrill: (filter) => set((s) => ({ drillFilters: s.drillFilters.filter((f) => f !== filter) })),
   clearDrill: () => set({ drillFilters: [] }),
   setSearch: (search) => set({ search }),
   setCustomerQuery: (customerQuery) => set({ customerQuery }),

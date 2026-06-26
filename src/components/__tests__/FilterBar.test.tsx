@@ -83,7 +83,14 @@ describe('FilterBar', () => {
   it('should_call_resetAll_when_reset_button_clicked', () => {
     // 先设置一些状态
     useDataStore.setState({
-      filters: { owner: '金柳', industryLevel1: '', product: '', expectedQuarter: '', status: '', forecastType: '' },
+      filters: {
+        owner: '金柳',
+        industryLevel1: '',
+        product: '',
+        expectedQuarter: '',
+        status: '',
+        forecastType: '',
+      },
       search: '南京',
       customerQuery: 'XX',
     });

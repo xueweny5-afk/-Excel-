@@ -27,7 +27,9 @@ export function UnmatchedCustomerTable({ customers }: UnmatchedCustomerTableProp
               <tr key={customer}>
                 <td>{index + 1}</td>
                 <td>{customer}</td>
-                <td><span className="match-status failed">未匹配</span></td>
+                <td>
+                  <span className="match-status failed">未匹配</span>
+                </td>
                 <td>检查客户全称，或补充客户别名后重新分析</td>
               </tr>
             ))}

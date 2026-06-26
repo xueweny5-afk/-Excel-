@@ -10,7 +10,8 @@ interface KeyCustomerChartsProps {
 
 /** 重点客户图表区：客户金额排行、客户数量排行、产品分布、销售分布、阶段分布 */
 export function KeyCustomerCharts({ analysis }: KeyCustomerChartsProps) {
-  const { customerAmountRank, customerCountRank, productAmount, ownerAmount, stageAmount } = analysis.chartData;
+  const { customerAmountRank, customerCountRank, productAmount, ownerAmount, stageAmount } =
+    analysis.chartData;
   return (
     <section className="chart-grid">
       <ChartCard
@@ -18,10 +19,7 @@ export function KeyCustomerCharts({ analysis }: KeyCustomerChartsProps) {
         subtitle={topInsight(customerAmountRank, '暂无客户金额数据')}
         option={barOption(customerAmountRank, true, chartColors.primary)}
       />
-      <ChartCard
-        title="客户商机数量排行"
-        option={countBarOption(customerCountRank, true)}
-      />
+      <ChartCard title="客户商机数量排行" option={countBarOption(customerCountRank, true)} />
       <DistributionCard
         title="产品金额分布"
         subtitle={shareInsight(productAmount, '产品')}

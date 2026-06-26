@@ -1,6 +1,12 @@
 export type ForecastType = 'Commit' | 'Best Case' | 'Pipeline' | 'Omitted' | 'Unknown';
 export type HealthLevel = '健康' | '关注' | '风险';
-export type DrillField = 'owner' | 'industryLevel1' | 'product' | 'expectedQuarter' | 'forecastType' | 'healthLevel';
+export type DrillField =
+  | 'owner'
+  | 'industryLevel1'
+  | 'product'
+  | 'expectedQuarter'
+  | 'forecastType'
+  | 'healthLevel';
 
 export interface PPLRecord {
   id: string;
