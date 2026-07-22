@@ -9,13 +9,12 @@ const TAB_LIST: Array<{ key: TabKey; label: string }> = [
   { key: 'keyCustomers', label: '重点客户分析' },
 ];
 
-/** Tab 切换栏 */
 export function TabBar({ rightSlot }: { rightSlot?: ReactNode }) {
   const activeTab = useDataStore((s) => s.activeTab);
   const setActiveTab = useDataStore((s) => s.setActiveTab);
 
   return (
-    <nav className="tabs">
+    <nav className="tabs sales-tabs" aria-label="销售经营子栏目">
       {TAB_LIST.map(({ key, label }) => (
         <button key={key} className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>
           {label}

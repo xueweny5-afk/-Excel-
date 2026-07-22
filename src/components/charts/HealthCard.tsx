@@ -28,7 +28,7 @@ export function HealthCard({ items, subtitle, onClick }: HealthCardProps) {
                 style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }}
               />
             </span>
-            <strong>{item.value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万</strong>
+            <strong>{Math.round(item.value).toLocaleString('zh-CN')} 万</strong>
             <em>{item.count} 个</em>
           </button>
         ))}

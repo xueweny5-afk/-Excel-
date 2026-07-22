@@ -4,6 +4,9 @@ import type {
   DashboardData,
   ForecastType,
   HealthLevel,
+  NaCustomer,
+  NaCustomerType,
+  PerformanceRecord,
   PPLRecord,
   SummaryRecord,
 } from '../domain';
@@ -39,8 +42,19 @@ const DANGEROUS_KEYS = new Set([
 ]);
 
 // ========== 健康度算法常量 ==========
-/** 各销售阶段对应的成熟度权重（0-1） */
+/**
+ * 各阶段对应的成熟度权重（0-1）。
+ * 售前口径（带数字前缀）排在销售口径前面，因为 `Object.keys().find(s => stage.includes(s))`
+ * 按插入顺序匹配——让"3.方案评估..."先于"方案评估"匹配，避免售前的"3.方案评估"被错算成销售的 0.55。
+ */
 const STAGE_WEIGHTS: Record<string, number> = {
+  // 售前口径（数字前缀版本，优先匹配）
+  '1.提出需求': 0.2,
+  '2.项目立项，预算到位': 0.5,
+  '3.方案评估，选择品牌及供应商': 0.65,
+  '4.内部达成共识，确认品牌及供应商方案': 0.8,
+  '5.招标采购': 0.9,
+  // 销售口径
   初步接洽: 0.2,
   需求确认: 0.4,
   方案交流: 0.5,
@@ -75,10 +89,25 @@ const MAX_CELL_LENGTH = 10000;
  */
 const ID_SEPARATOR = '|';
 
+const PERFORMANCE_FIELD_ALIASES: Record<string, string[]> = {
+  customerName: ['最终用户', '客户名称', '最终客户', '客户', '最终用户名'],
+  productName: ['产品名称', '产品', '产品线'],
+  productLevel2: ['二级分类', '二级产品分类', '二级产品线', '二级'],
+  productLevel3: ['三级产品分类', '三级分类', '三类产品分类', '三级'],
+  orderAmount: ['下单金额', '订单金额', '已下单金额'],
+  contractAmount: ['合同总额', '合同金额', '合同总价'],
+  salesGrossProfit: ['销售毛利（含激励）', '销售毛利(含激励)', '销售毛利', '个人毛利'],
+  performanceGrossProfit: ['业绩毛利金额（含激励）', '业绩毛利金额(含激励)', '业绩毛利金额', '业绩毛利'],
+  finalPerformance: ['最终核算业绩', '核算业绩', '最终业绩'],
+  isT2000: ['T2000客户标签', 'T2000 客户标签', '客户标签', 'CRM标签', '客户Tag', '客户是否T2000', '客户是否 T2000', '是否T2000'],
+};
+
 // ========== 入口 ==========
 export async function parseDashboardFile(file: File): Promise<DashboardData> {
   validateFile(file);
-  const workbook = XLSX.read(await file.arrayBuffer(), {
+  const arrayBuffer = await file.arrayBuffer();
+  validateWorkbookContent(file, arrayBuffer);
+  const workbook = XLSX.read(arrayBuffer, {
     type: 'array',
     cellHTML: false,
     cellFormula: false,
@@ -99,18 +128,50 @@ export async function parseDashboardFile(file: File): Promise<DashboardData> {
     return acc;
   }, {});
 
-  const pplSheetName = findSheet(workbook.SheetNames, ['PPL明细', 'PPL', 'Pipeline']);
+  const pplSheetName =
+    findSheet(workbook.SheetNames, [
+      'PPL明细',
+      'PPL',
+      'Pipeline',
+      '商机明细',
+      '商机',
+      '商机&业绩',
+      '商机和业绩',
+    ]) ?? findPplSheetByHeaders(workbook.SheetNames, sheets);
   const summarySheetName = findSheet(workbook.SheetNames, ['数据汇总', '汇总']);
   const activitySheetName = findSheet(workbook.SheetNames, ['新增PPL+活动记录', '活动记录', '新增PPL']);
+  const performanceSheetName =
+    findSheet(workbook.SheetNames, ['Y26业绩明细', 'Y26 业绩明细', '业绩明细', '业绩', '订单明细', '下单明细']) ??
+    findPerformanceSheetByHeaders(workbook.SheetNames, sheets);
+  const naSheetNames = findCurrentQuarterNaSheets(workbook.SheetNames);
 
   const pplRows = pplSheetName ? sheets[pplSheetName] : [];
   const fieldMap = mapFields(pplRows[0] ?? {});
   const missingFields = REQUIRED_PPL_FIELDS.filter((field) => !fieldMap[field]);
   const warnings: string[] = [];
   let skippedRows = 0;
+  if (!pplSheetName) {
+    warnings.push('未识别到商机明细 Sheet，请确认 Sheet 名包含 PPL、Pipeline 或商机明细。');
+  }
+  if (pplSheetName && missingFields.length > 0) {
+    warnings.push(`商机明细缺少关键字段：${missingFields.map(fieldLabel).join('、')}。`);
+  }
+
+  // 销售/售前 PPL Sheet 口径不同，决定 amount 列无表头单位线索时的兜底：
+  //   - 销售 PPL（"PPL明细"/"PPL"/"Pipeline"）→ 万元
+  //   - 售前 PPL 两种常见格式：
+  //       a) 新格式：sheet 名含"售前"且含"明细"（如"售前商机明细表-XXX"），金额已是万元
+  //       b) 老格式：sheet 名含"商机明细"/"商机"（如"商机明细"），金额是元
+  const isPresalesAmountMode: 'wanyuan' | 'yuan' | null =
+    pplSheetName && /^(PPL明细|PPL|Pipeline)$/.test(pplSheetName)
+      ? 'wanyuan'
+      : pplSheetName && /售前.*明细|售前.*商机/.test(pplSheetName)
+        ? 'wanyuan'
+        : null;
+  const pplAmountMode: 'wanyuan' | 'yuan' = isPresalesAmountMode ?? 'yuan';
 
   const ppl = pplRows.flatMap((row, index) => {
-    const record = normalizePpl(row, fieldMap, index, warnings);
+    const record = normalizePpl(row, fieldMap, index, warnings, pplAmountMode);
     if (!record) {
       skippedRows += 1;
       return [];
@@ -120,17 +181,23 @@ export async function parseDashboardFile(file: File): Promise<DashboardData> {
 
   const summary = summarySheetName ? parseSummary(sheets[summarySheetName]) : [];
   const activity = activitySheetName ? parseActivity(sheets[activitySheetName]) : [];
+  const performance = performanceSheetName ? parsePerformance(sheets[performanceSheetName]) : [];
+  const naCustomers = naSheetNames.flatMap((name) => parseNaCustomers(sheets[name], name));
 
   return {
     ppl,
     summary,
     activity,
+    performance,
+    naCustomers,
     report: {
       fileName: file.name,
       importedAt: new Date().toLocaleString('zh-CN'),
       pplRows: ppl.length,
       summaryRows: summary.length,
       activityRows: activity.length,
+      performanceRows: performance.length,
+      naCustomerRows: naCustomers.length,
       skippedRows,
       detectedFields: Object.keys(fieldMap).map((key) => `${fieldLabel(key)}：${fieldMap[key]}`),
       missingFields: missingFields.map(fieldLabel),
@@ -140,20 +207,46 @@ export async function parseDashboardFile(file: File): Promise<DashboardData> {
 }
 
 function validateFile(file: File) {
-  const allowed = ['.xlsx', '.xls', '.csv'];
-  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-  if (!allowed.includes(ext)) throw new Error('仅支持 .xlsx / .xls / .csv 文件。');
+  const allowed = ['.xlsx', '.xls', '.csv', '.xlsm', '.xlsb', '.et'];
+  const dotIndex = file.name.lastIndexOf('.');
+  const ext = dotIndex >= 0 ? file.name.slice(dotIndex).toLowerCase() : '';
+  if (!allowed.includes(ext)) throw new Error('仅支持 .xlsx / .xls / .csv / .xlsm / .xlsb / .et 文件。');
   if (file.size > MAX_FILE_SIZE) throw new Error('文件超过 20MB，请拆分后再导入。');
   // MIME 类型二次校验（防御文件名伪装）
   const allowedMimePrefixes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml',
     'application/vnd.ms-excel',
+    'application/vnd.ms-excel.sheet.macroenabled',
+    'application/vnd.ms-excel.sheet.binary',
     'text/csv',
+    'text/plain',
     'application/octet-stream', // 浏览器对部分 xlsx 返回 generic
   ];
   if (file.type && !allowedMimePrefixes.some((prefix) => file.type.startsWith(prefix))) {
     throw new Error(`文件 MIME 类型不合法：${file.type}，请确认是 Excel/CSV 文件。`);
   }
+}
+
+function validateWorkbookContent(file: File, arrayBuffer: ArrayBuffer) {
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (ext === '.csv') return;
+
+  const bytes = new Uint8Array(arrayBuffer.slice(0, 8));
+  const signature = Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join(' ');
+  const isZipOffice = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  const isLegacyOffice = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  const isTextLike = bytes.every((byte) => byte === 0 || byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126));
+  const inverted = Array.from(bytes).map((byte) => 0xff - byte);
+  const isVirtualShell = String.fromCharCode(...inverted.slice(0, 4)) === 'VSBX';
+
+  if (isZipOffice || isLegacyOffice || (ext === '.xls' && isTextLike)) return;
+
+  if (isVirtualShell) {
+    throw new Error('该文件不是标准 Excel 工作簿，像是 WPS/系统生成的临时壳文件。请在 Excel 或 WPS 中打开后，另存为标准 .xlsx 或 .xlsm 再导入。');
+  }
+  throw new Error(`该文件扩展名是 ${ext}，但内容不是标准 Excel 文件，文件头为 ${signature}。请另存为标准 .xlsx / .xlsm 后再导入。`);
 }
 
 export function sanitizeRow(row: Row): Row {
@@ -170,19 +263,97 @@ function findSheet(sheetNames: string[], candidates: string[]) {
   return sheetNames.find((name) => candidates.some((candidate) => name.includes(candidate)));
 }
 
+/**
+ * 找出当前季度（或最新）的 NA 客户 Sheet。
+ *
+ * 业务规则：每个 Excel 文件通常包含多个季度的 NA Sheet（Q1/Q3/Q4），
+ * 但只有当前季度才是业务关注的活跃名单。优先返回当前季度的 Sheet；
+ * 找不到时回退到最新的季度。
+ *
+ * Sheet 名格式示例：`2026年Q3-NA客户`、`2026年Q1-NA客户`。
+ */
+function findCurrentQuarterNaSheets(sheetNames: string[]): string[] {
+  const now = new Date();
+  const currentQuarter = `Q${Math.floor(now.getMonth() / 3) + 1}`;
+  const currentYear = now.getFullYear();
+  const sheetMeta = sheetNames
+    .map((name) => ({ name, meta: matchQuarterSheet(name) }))
+    .filter((item): item is { name: string; meta: { year: number; quarter: number } } => item.meta !== null);
+
+  if (sheetMeta.length === 0) return [];
+
+  const currentQuarterNumber = Number(currentQuarter.replace(/\D/g, ''));
+  const matched = sheetMeta.filter((item) => item.meta.year === currentYear && item.meta.quarter === currentQuarterNumber);
+  if (matched.length > 0) return matched.map((item) => item.name);
+
+  // 回退：选最新（年最大，再 Q 最大）
+  sheetMeta.sort((a, b) => b.meta.year - a.meta.year || b.meta.quarter - a.meta.quarter);
+  return sheetMeta[0] ? [sheetMeta[0].name] : [];
+}
+
+/**
+ * 解析 Sheet 名中的季度信息。匹配 `YYYY年Q{1-4}-NA客户` 或 `Q{1-4}-NA客户`。
+ */
+function matchQuarterSheet(name: string): { year: number; quarter: number } | null {
+  const yearQuarterMatch = name.match(/(\d{4})\s*年?\s*[Qq]([1-4])/);
+  if (yearQuarterMatch) {
+    return { year: Number(yearQuarterMatch[1]), quarter: Number(yearQuarterMatch[2]) };
+  }
+  const quarterOnly = name.match(/^[Qq]([1-4])/);
+  if (quarterOnly) {
+    return { year: new Date().getFullYear(), quarter: Number(quarterOnly[1]) };
+  }
+  return null;
+}
+
+function findPplSheetByHeaders(sheetNames: string[], sheets: Record<string, Row[]>) {
+  if (sheetNames.length === 1) return sheetNames[0];
+  return sheetNames.find((sheetName) => {
+    const fieldMap = mapFields(sheets[sheetName]?.[0] ?? {});
+    const matchedRequired = REQUIRED_PPL_FIELDS.filter((field) => fieldMap[field]).length;
+    return matchedRequired >= 3 || Boolean(fieldMap.customerName && fieldMap.amount);
+  });
+}
+
+function findPerformanceSheetByHeaders(sheetNames: string[], sheets: Record<string, Row[]>) {
+  return sheetNames.find((sheetName) => {
+    const fieldMap = mapPerformanceFields(sheets[sheetName]?.[0] ?? {});
+    return Boolean(fieldMap.customerName && (fieldMap.orderAmount || fieldMap.salesGrossProfit || fieldMap.performanceGrossProfit));
+  });
+}
+
 function mapFields(row: Row) {
+  return mapFieldsWithAliases(row, PPL_FIELD_ALIASES);
+}
+
+function mapPerformanceFields(row: Row) {
+  return mapFieldsWithAliases(row, PERFORMANCE_FIELD_ALIASES);
+}
+
+function mapFieldsWithAliases(row: Row, aliasesByField: Record<string, string[]>) {
   const headers = Object.keys(row);
-  return Object.entries(PPL_FIELD_ALIASES).reduce<Record<string, string>>((acc, [field, aliases]) => {
-    const match = headers.find((header) =>
-      aliases.some((alias) => normalizeHeader(header) === normalizeHeader(alias)),
-    );
+  return Object.entries(aliasesByField).reduce<Record<string, string>>((acc, [field, aliases]) => {
+    const match = aliases.map((alias) => headers.find((header) => headerMatches(header, alias))).find(Boolean);
     if (match) acc[field] = match;
     return acc;
   }, {});
 }
 
+function headerMatches(header: string, alias: string) {
+  const normalizedHeader = normalizeHeader(header);
+  const normalizedAlias = normalizeHeader(alias);
+  return (
+    normalizedHeader === normalizedAlias ||
+    normalizedHeader.includes(normalizedAlias) ||
+    normalizedAlias.includes(normalizedHeader)
+  );
+}
+
 export function normalizeHeader(value: string) {
-  return value.replace(/\s/g, '').toLowerCase();
+  return value
+    .replace(/\s/g, '')
+    .replace(/[()（）【】[\]_\-—:：/\\]/g, '')
+    .toLowerCase();
 }
 
 function normalizePpl(
@@ -190,11 +361,12 @@ function normalizePpl(
   fieldMap: Record<string, string>,
   rowNumber: number,
   warnings: string[],
+  amountMode: 'wanyuan' | 'yuan' = 'wanyuan',
 ): PPLRecord | null {
   const owner = readString(row, fieldMap.owner);
   const customerName = readString(row, fieldMap.customerName);
   const opportunityName = readString(row, fieldMap.opportunityName);
-  const amount = parseAmount(row[fieldMap.amount]);
+  const amount = parseAmountByHeader(row[fieldMap.amount], fieldMap.amount, amountMode);
   if (!owner && !customerName && !opportunityName && amount === 0) return null;
   if (!fieldMap.amount || amount === 0) warnings.push('部分记录金额为空或无法识别，已按 0 处理。');
 
@@ -220,6 +392,7 @@ function normalizePpl(
     opportunityName: opportunityName || '未命名商机',
     industryLevel1: readString(row, fieldMap.industryLevel1) || '未分类',
     industryLevel2: readString(row, fieldMap.industryLevel2),
+    t2000CustomerTag: readString(row, fieldMap.t2000CustomerTag),
     product: readString(row, fieldMap.product) || '未分类产品',
     amount,
     stage,
@@ -233,6 +406,40 @@ function normalizePpl(
     healthReasons: health.reasons,
     raw: row,
   };
+}
+
+function parsePerformance(rows: Row[]): PerformanceRecord[] {
+  const fieldMap = mapPerformanceFields(rows[0] ?? {});
+  return rows.flatMap((row) => {
+    const customerName = readString(row, fieldMap.customerName);
+    const orderAmount = parseAmountByHeader(row[fieldMap.orderAmount], fieldMap.orderAmount, 'yuan');
+    const salesGrossProfit = parseAmountByHeader(row[fieldMap.salesGrossProfit], fieldMap.salesGrossProfit, 'yuan');
+    const performanceGrossProfit = parseAmountByHeader(
+      row[fieldMap.performanceGrossProfit],
+      fieldMap.performanceGrossProfit,
+      'yuan',
+    );
+    const finalPerformance = parseAmountByHeader(row[fieldMap.finalPerformance], fieldMap.finalPerformance, 'yuan');
+    const contractAmount = parseAmountByHeader(row[fieldMap.contractAmount], fieldMap.contractAmount, 'yuan');
+
+    if (!customerName && !orderAmount && !salesGrossProfit && !performanceGrossProfit && !finalPerformance) return [];
+
+    return [
+      {
+        customerName,
+        productName: readString(row, fieldMap.productName),
+        productLevel2: readString(row, fieldMap.productLevel2),
+        productLevel3: readString(row, fieldMap.productLevel3),
+        orderAmount,
+        contractAmount,
+        salesGrossProfit,
+        performanceGrossProfit,
+        finalPerformance,
+        isT2000: parseT2000Value(row[fieldMap.isT2000], fieldMap.isT2000),
+        raw: row,
+      },
+    ];
+  });
 }
 
 /**
@@ -252,6 +459,31 @@ function readString(row: Row, key?: string) {
   return key ? String(row[key] ?? '').trim() : '';
 }
 
+function parseBoolean(value: unknown) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return false;
+  // 把"--" / "无" / "/" / "n/a" 等"无值"占位符也视为 false，
+  // 否则 T2000 类布尔字段（如"客户是否T2000"列里用户填"--"）会被错判成 true
+  return !['否', 'no', 'false', '0', 'n', '非', '--', '——', '-', '无', '空', '/', 'n/a', 'na'].includes(text);
+}
+
+function parseT2000Value(value: unknown, header?: string) {
+  const normalizedHeader = normalizeHeader(header ?? '');
+  const normalizedValue = String(value ?? '').replace(/\s/g, '').toLowerCase();
+  if (!normalizedValue) return false;
+  const isTagField =
+    normalizedHeader.includes('客户标签') ||
+    normalizedHeader.includes('crm标签') ||
+    normalizedHeader.includes('客户tag') ||
+    normalizedHeader === '标签';
+  if (isTagField) {
+    // tag 字段里若值含 "t2000" 直接 true；其它都按布尔语义判（parseBoolean 已覆盖 "--" 等占位符）
+    if (normalizedValue.includes('t2000')) return true;
+    return normalizedHeader.includes('t2000') && parseBoolean(value);
+  }
+  return parseBoolean(value);
+}
+
 export function parseAmount(value: unknown) {
   if (value === null || value === undefined || value === '') return 0;
   const text = String(value).replace(/,/g, '').trim();
@@ -260,6 +492,34 @@ export function parseAmount(value: unknown) {
   if (text.includes('亿')) return numeric * 10000;
   if (text.includes('万')) return numeric;
   return numeric;
+}
+
+/**
+ * 销售/售前金额单位识别。
+ * - mode='wanyuan'：万元口径（销售 PPL 明细、目标缺口等）
+ * - mode='yuan'：元口径（售前业绩明细、合同金额等，需要 ÷10000 转万元存储）
+ *
+ * 表头显式声明 "万元"/"元" 时优先尊重；都没有时按 mode 兜底。
+ */
+function parseAmountByHeader(value: unknown, header?: string, mode: 'wanyuan' | 'yuan' = 'wanyuan') {
+  const amount = parseAmount(value);
+  if (!Number.isFinite(amount) || amount === 0) return 0;
+  const valueText = String(value ?? '');
+  const headerText = String(header ?? '');
+
+  if (valueText.includes('万') || valueText.includes('萬')) return amount;
+
+  if (/万元|萬元/.test(headerText)) return amount;          // 表头显式说"万元"
+  if (/(^|[^万])元/.test(headerText) && !/万元/.test(headerText)) return amount / 10000;
+
+  // 业绩/合同类列在售前模块常常以"元"为单位，按 mode 区分：
+  // - mode='yuan'：÷10000
+  // - mode='wanyuan'：保持原值（销售 PPL 不该用这些列名做 amount，但兜底防呆）
+  if (/总价|总额|合同金额|合同总额|下单金额|订单金额|销售毛利|业绩毛利|核算业绩|预计合同金额/.test(headerText)) {
+    return mode === 'yuan' ? amount / 10000 : amount;
+  }
+  // 兜底：万元模式保持原值；元模式 ÷10000。
+  return mode === 'yuan' ? amount / 10000 : amount;
 }
 
 /**
@@ -279,9 +539,10 @@ export function parseRate(value: unknown) {
 
 export function parseForecast(value: unknown): ForecastType {
   const text = String(value ?? '').toLowerCase();
-  if (text.includes('commit') || text.includes('是') || text.includes('确认')) return 'Commit';
+  if (text.includes('commit') || text.includes('是') || text.includes('确认') || text.includes('承诺') || text.includes('中标'))
+    return 'Commit';
   if (text.includes('best')) return 'Best Case';
-  if (text.includes('pipeline') || text.includes('争取')) return 'Pipeline';
+  if (text.includes('pipeline') || text.includes('争取') || text.includes('商机')) return 'Pipeline';
   if (text.includes('omit') || text.includes('否')) return 'Omitted';
   return 'Unknown';
 }
@@ -410,6 +671,51 @@ function parseActivity(rows: Row[]): ActivityRecord[] {
         conversionRate: activityCount ? newPplAmount / activityCount : 0,
         raw: row,
       },
+    ];
+  });
+}
+
+/**
+ * 解析 NA 客户 Sheet（季度 NA 客户名单）。
+ *
+ * 已知 Sheet 列：
+ * - 客户/合作伙伴名称
+ * - 客户所有人
+ * - 售前
+ * - 客户类型 (NA-I / NA-II / NA代管)
+ * - 客户象限名称
+ * - T2000客户标签
+ * - 最终客户所属一级行业 / 二级行业
+ * - 是否为规模化产出目标（20%及以上）/ 规模化产出目标
+ *
+ * 关键能力：把 T2000客户标签非空的客户识别为"权威 T2000 名单"，
+ * 即使 PPL/业绩里没有对应记录，也会出现在统计视图里（用于盘点覆盖漏斗）。
+ */
+function parseNaCustomers(rows: Row[], sourceSheet: string): NaCustomer[] {
+  return rows.flatMap((row) => {
+    const customer = String(row['客户/合作伙伴名称'] ?? '').trim();
+    if (!customer || customer === '--' || customer.includes('汇总')) return [];
+    const t2000 = String(row['T2000客户标签'] ?? '').trim();
+    const scaleTarget = String(row['规模化产出目标'] ?? '').trim();
+    const typeRaw = String(row['客户类型'] ?? '').trim();
+    const customerType: NaCustomerType =
+      typeRaw === 'NA-I' || typeRaw === 'NA-II' || typeRaw === 'NA代管' ? typeRaw : '';
+    return [
+      {
+        customer,
+        customerOwner: String(row['客户所有人'] ?? '').trim(),
+        presales: String(row['售前'] ?? '').trim(),
+        customerType,
+        quadrant: String(row['客户象限名称'] ?? '').trim(),
+        isT2000: t2000.toLowerCase().includes('t2000') || scaleTarget.length > 0,
+        industryLevel1: String(
+          row['最终客户所属一级行业'] ?? row['最终客户所属二级行业 (1)'] ?? '',
+        ).trim(),
+        industryLevel2: String(row['最终客户所属二级行业'] ?? '').trim(),
+        scaleTarget,
+        sourceSheet,
+        raw: row,
+      } satisfies NaCustomer,
     ];
   });
 }

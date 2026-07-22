@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="销售工作台">
+  <defs>
+    <linearGradient id="bg" x1="28" y1="18" x2="228" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb" />
+      <stop offset="1" stop-color="#0f766e" />
+    </linearGradient>
+    <linearGradient id="card" x1="70" y1="66" x2="196" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.98" />
+      <stop offset="1" stop-color="#dbeafe" stop-opacity="0.92" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)" />
+  <path d="M70 74a18 18 0 0 1 18-18h80l34 34v92a18 18 0 0 1-18 18H88a18 18 0 0 1-18-18V74Z" fill="url(#card)" />
+  <path d="M168 56v27a11 11 0 0 0 11 11h23" fill="none" stroke="#60a5fa" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M96 116h78M96 146h78M96 176h52" stroke="#1d4ed8" stroke-width="13" stroke-linecap="round" />
+  <circle cx="82" cy="116" r="8" fill="#14b8a6" />
+  <circle cx="82" cy="146" r="8" fill="#14b8a6" />
+  <circle cx="82" cy="176" r="8" fill="#14b8a6" />
+  <path d="M42 58h42M42 84h28" stroke="#bfdbfe" stroke-width="12" stroke-linecap="round" opacity="0.72" />
+  <path d="M176 210h34" stroke="#99f6e4" stroke-width="12" stroke-linecap="round" opacity="0.8" />
+</svg>

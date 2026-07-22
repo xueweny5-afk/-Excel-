@@ -8,7 +8,7 @@ import type { KPISummary } from '../lib/analyzer';
  * 所有组件都从这里消费，避免每个组件各自 useMemo 重复计算。
  */
 export function useFilteredPpl() {
-  const rawPpl = useDataStore((s) => s.data?.ppl ?? EMPTY_ARRAY);
+  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_ARRAY);
   const filters = useDataStore((s) => s.filters);
   const drillFilters = useDataStore((s) => s.drillFilters);
   const search = useDataStore((s) => s.search);

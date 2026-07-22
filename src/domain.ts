@@ -15,6 +15,7 @@ export interface PPLRecord {
   opportunityName: string;
   industryLevel1: string;
   industryLevel2?: string;
+  t2000CustomerTag?: string;
   product: string;
   amount: number;
   stage: string;
@@ -45,12 +46,48 @@ export interface ActivityRecord {
   raw: Record<string, unknown>;
 }
 
+export type NaCustomerType = 'NA-I' | 'NA-II' | 'NA代管' | '';
+
+export interface NaCustomer {
+  customer: string;
+  customerOwner: string;
+  presales: string;
+  customerType: NaCustomerType;
+  quadrant: string;
+  isT2000: boolean;
+  /** 一级行业 */
+  industryLevel1: string;
+  /** 二级行业 */
+  industryLevel2: string;
+  /** 规模化产出目标相关 */
+  scaleTarget: string;
+  /** 来源 Sheet 名（Q1 / Q3 / Q4 等），用于追溯 */
+  sourceSheet: string;
+  raw: Record<string, unknown>;
+}
+
+export interface PerformanceRecord {
+  customerName: string;
+  productName: string;
+  productLevel2: string;
+  productLevel3: string;
+  orderAmount: number;
+  contractAmount: number;
+  salesGrossProfit: number;
+  performanceGrossProfit: number;
+  finalPerformance: number;
+  isT2000: boolean;
+  raw: Record<string, unknown>;
+}
+
 export interface ImportReport {
   fileName: string;
   importedAt: string;
   pplRows: number;
   summaryRows: number;
   activityRows: number;
+  performanceRows: number;
+  naCustomerRows?: number;
   skippedRows: number;
   detectedFields: string[];
   missingFields: string[];
@@ -61,6 +98,8 @@ export interface DashboardData {
   ppl: PPLRecord[];
   summary: SummaryRecord[];
   activity: ActivityRecord[];
+  performance: PerformanceRecord[];
+  naCustomers?: NaCustomer[];
   report: ImportReport;
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import type { DashboardData } from './domain';
 import { parseDashboardFile } from './lib/parser';
 import { groupAmount } from './lib/analyzer';
 import { formatMoney } from './lib/formatters';
@@ -18,21 +19,42 @@ import { ChartGrid } from './components/charts/ChartGrid';
 import { PplTable } from './components/tables/PplTable';
 import { SimpleRecords } from './components/tables/SimpleRecords';
 import { KeyCustomerView } from './components/keyCustomers/KeyCustomerView';
+import { PresalesDashboardView } from './components/presales/PresalesDashboardView';
+import { WorkbenchView } from './workbench/WorkbenchView';
+import { captureDashboardImport } from './workbench/db';
+import type { ModuleKey } from './stores/dataStore';
 
-/**
- * 应用根组件。
- * 职责：
- *   1. 监听拖拽 + 文件上传，调用 parser 并写入 store
- *   2. 根据 activeTab 分发到对应视图
- *   3. PPL Tab 装配：FilterBar → DrillTags → KpiGrid → InsightBanner → ChartGrid → PplTable
- */
+const EMPTY_DASHBOARD_DATA: DashboardData = {
+  ppl: [],
+  summary: [],
+  activity: [],
+  performance: [],
+  report: {
+    fileName: '未导入文件',
+    importedAt: '-',
+    pplRows: 0,
+    summaryRows: 0,
+    activityRows: 0,
+    performanceRows: 0,
+    skippedRows: 0,
+    detectedFields: [],
+    missingFields: [],
+    warnings: [],
+  },
+};
+
 export default function App() {
-  const data = useDataStore((s) => s.data);
+  const salesData = useDataStore((s) => s.salesData);
+  const presalesData = useDataStore((s) => s.presalesData);
+  const previousPresalesData = useDataStore((s) => s.previousPresalesData);
   const loading = useDataStore((s) => s.loading);
   const error = useDataStore((s) => s.error);
+  const activeModule = useDataStore((s) => s.activeModule);
   const activeTab = useDataStore((s) => s.activeTab);
+  const setActiveModule = useDataStore((s) => s.setActiveModule);
   const isDraggingFile = useDataStore((s) => s.isDraggingFile);
-  const setData = useDataStore((s) => s.setData);
+  const setSalesData = useDataStore((s) => s.setSalesData);
+  const setPresalesData = useDataStore((s) => s.setPresalesData);
   const setLoading = useDataStore((s) => s.setLoading);
   const setError = useDataStore((s) => s.setError);
   const setDragging = useDataStore((s) => s.setDragging);
@@ -41,6 +63,8 @@ export default function App() {
 
   const { filteredPpl, rawPpl, kpis } = useFilteredPpl();
   const dragHandlers = useFileDrop();
+  const isPresales = activeModule === 'presales';
+  const isWorkbench = activeModule === 'workbench';
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -49,17 +73,28 @@ export default function App() {
       setError('');
       try {
         const parsed = await parseDashboardFile(file);
-        setData(parsed);
+        if (activeModule === 'presales') {
+          setPresalesData(parsed);
+        } else {
+          setSalesData(parsed);
+        }
+        try {
+          await captureDashboardImport({
+            sourceModule: activeModule === 'presales' ? 'presales' : 'sales',
+            data: parsed,
+          });
+        } catch (captureError) {
+          console.warn('[WorkbenchImport]', captureError);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : '文件解析失败，请检查格式和表头。');
       } finally {
         setLoading(false);
       }
     },
-    [setData, setDragging, setError, setLoading],
+    [activeModule, setPresalesData, setSalesData, setDragging, setError, setLoading],
   );
 
-  // 监听 useFileDrop 派发的全局事件
   useEffect(() => {
     function onFileDrop(event: Event) {
       const custom = event as CustomEvent<File>;
@@ -74,42 +109,92 @@ export default function App() {
   return (
     <main
       className={`app-shell ${isDraggingFile ? 'dragging-file' : ''}`}
-      onDragEnter={dragHandlers.handleDragOver}
-      onDragOver={dragHandlers.handleDragOver}
-      onDragLeave={dragHandlers.handleDragLeave}
-      onDrop={dragHandlers.handleDrop}
+      onDragEnter={isWorkbench ? undefined : dragHandlers.handleDragOver}
+      onDragOver={isWorkbench ? undefined : dragHandlers.handleDragOver}
+      onDragLeave={isWorkbench ? undefined : dragHandlers.handleDragLeave}
+      onDrop={isWorkbench ? undefined : dragHandlers.handleDrop}
     >
-      <TopBar report={data?.report ?? null} hasData={!!data} onUpload={handleFile} onClear={clearData} />
+      <ModuleNav
+        active={activeModule}
+        onSales={() => setActiveModule('sales')}
+        onPresales={() => setActiveModule('presales')}
+        onWorkbench={() => setActiveModule('workbench')}
+      />
 
-      {loading && (
-        <StatusCard title="正在解析 Excel..." description="正在识别 Sheet、清洗字段并生成分析结果。" />
+      {activeModule === 'sales' && (
+        <TopBar
+          report={salesData?.report ?? null}
+          hasData={!!salesData}
+          onUpload={handleFile}
+          onClear={clearData}
+        />
       )}
-      {error && <StatusCard tone="danger" title="文件解析失败" description={error} />}
-      {!data && !loading && !error && <FileDropZone />}
 
-      {data && (
+      {!isWorkbench && loading && (
+        <StatusCard title="正在分析 Excel..." description="正在识别 Sheet、清洗字段并生成分析结果。" />
+      )}
+      {!isWorkbench && error && <StatusCard tone="danger" title="文件解析失败" description={error} />}
+
+      {isWorkbench ? (
+        <WorkbenchView />
+      ) : isPresales ? (
+        <PresalesDashboardView
+          data={presalesData ?? EMPTY_DASHBOARD_DATA}
+          previousData={previousPresalesData}
+          onUpload={handleFile}
+        />
+      ) : (
         <>
-          <ImportReportPanel report={data.report} />
           <TabBar />
-          {activeTab === 'ppl' && (
-            <PplTabView
-              rawPpl={rawPpl}
-              filteredPpl={filteredPpl}
-              kpis={kpis}
-              insights={insights}
-              toggleDrill={toggleDrill}
-            />
+          {!salesData && !loading && !error && <FileDropZone onFile={handleFile} />}
+          {salesData && (
+            <>
+              <ImportReportPanel report={salesData.report} />
+              {activeTab === 'ppl' && (
+                <PplTabView
+                  rawPpl={rawPpl}
+                  filteredPpl={filteredPpl}
+                  kpis={kpis}
+                  insights={insights}
+                  toggleDrill={toggleDrill}
+                />
+              )}
+              {activeTab === 'summary' && <SimpleRecords title="数据汇总" rows={salesData.summary} />}
+              {activeTab === 'activity' && <SimpleRecords title="活动记录" rows={salesData.activity} />}
+              {activeTab === 'keyCustomers' && <KeyCustomerView />}
+            </>
           )}
-          {activeTab === 'summary' && <SimpleRecords title="数据汇总" rows={data.summary} />}
-          {activeTab === 'activity' && <SimpleRecords title="活动记录" rows={data.activity} />}
-          {activeTab === 'keyCustomers' && <KeyCustomerView />}
         </>
       )}
     </main>
   );
 }
 
-/* ==================== 内部子视图 ==================== */
+function ModuleNav({
+  active,
+  onSales,
+  onPresales,
+  onWorkbench,
+}: {
+  active: ModuleKey;
+  onSales: () => void;
+  onPresales: () => void;
+  onWorkbench: () => void;
+}) {
+  return (
+    <nav className="module-nav" aria-label="驾驶舱栏目">
+      <button className={active === 'sales' ? 'active' : ''} onClick={onSales}>
+        销售经营驾驶舱
+      </button>
+      <button className={active === 'presales' ? 'active' : ''} onClick={onPresales}>
+        售前经营驾驶舱
+      </button>
+      <button className={active === 'workbench' ? 'active' : ''} onClick={onWorkbench}>
+        售前工作台
+      </button>
+    </nav>
+  );
+}
 
 interface PplTabViewProps {
   rawPpl: ReturnType<typeof useFilteredPpl>['rawPpl'];
@@ -145,7 +230,7 @@ function buildInsights(rows: ReturnType<typeof useFilteredPpl>['filteredPpl']) {
   const product = groupAmount(rows, 'product', 1)[0];
   const industry = groupAmount(rows, 'industryLevel1', 1)[0];
   const quarter = groupAmount(rows, 'expectedQuarter', 1)[0];
-  const riskCount = rows.filter((row) => row.healthLevel === '风险').length;
+  const riskCount = rows.filter((row) => String(row.healthLevel).includes('风险')).length;
   return [
     owner ? `最高销售：${owner.name}，${formatMoney(owner.value)}` : '暂无销售排行',
     product ? `最高产品：${product.name}` : '暂无产品排行',

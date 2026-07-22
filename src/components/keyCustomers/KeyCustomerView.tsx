@@ -13,8 +13,8 @@ import { UnmatchedCustomerTable } from '../tables/UnmatchedCustomerTable';
 export function KeyCustomerView() {
   const input = useDataStore((s) => s.keyCustomerInput);
   const setInput = useDataStore((s) => s.setKeyCustomerInput);
-  const rawPpl = useDataStore((s) => s.data?.ppl ?? EMPTY_ARRAY);
-  const activity = useDataStore((s) => s.data?.activity ?? EMPTY_ACTIVITY);
+  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_ARRAY);
+  const activity = useDataStore((s) => s.salesData?.activity ?? EMPTY_ACTIVITY);
 
   const analysis = useMemo(() => analyzeKeyCustomers(input, rawPpl, activity), [input, rawPpl, activity]);
   const hasInput = analysis.inputNames.length > 0;
@@ -33,8 +33,8 @@ export function KeyCustomerView() {
             />
           </label>
           <div className="key-customer-actions">
-            <button className="button primary" onClick={() => setInput(input.trim())}>
-              分析
+            <button className="button primary" disabled>
+              分析（输入后自动执行）
             </button>
             <button className="button ghost" onClick={() => setInput('')}>
               清空

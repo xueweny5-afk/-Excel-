@@ -11,10 +11,10 @@ interface ChartGridProps {
   onDrill: (field: DrillField, value: string) => void;
 }
 
-/** 主图表区：6 张图表（销售/行业/产品/季度/健康度/Forecast） */
+/** 主图表区：5 张图表（销售/行业/产品/季度/健康度） */
 export function ChartGrid({ data, onDrill }: ChartGridProps) {
   const aggregations = useChartAggregations(data);
-  const { owner, industry, product, quarter, forecast, health } = aggregations;
+  const { owner, industry, product, quarter, health } = aggregations;
 
   return (
     <section className="chart-grid">
@@ -46,12 +46,6 @@ export function ChartGrid({ data, onDrill }: ChartGridProps) {
         items={health}
         subtitle={topInsight(health, '暂无健康度数据')}
         onClick={(name) => onDrill('healthLevel', name)}
-      />
-      <DistributionCard
-        title="Forecast Pipeline 结构"
-        subtitle={shareInsight(forecast, 'Forecast')}
-        items={forecast}
-        onClick={(name) => onDrill('forecastType', name)}
       />
     </section>
   );

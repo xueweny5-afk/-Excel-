@@ -9,6 +9,7 @@ const mockReport: ImportReport = {
   pplRows: 100,
   summaryRows: 18,
   activityRows: 5,
+  performanceRows: 8,
   skippedRows: 2,
   detectedFields: ['销售：Pipeline所有人'],
   missingFields: [],
@@ -68,7 +69,6 @@ describe('TopBar', () => {
   });
 
   it('should_reset_input_value_after_upload_to_allow_repeat_same_file', () => {
-    // H7 修复：重置 input value 以允许重复上传同名文件
     const onUpload = vi.fn();
     render(<TopBar report={null} hasData={false} onUpload={onUpload} onClear={() => undefined} />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;

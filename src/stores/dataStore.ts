@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { DashboardData, DrillField, DrillFilter, Filters } from '../domain';
+import { readLatestPresalesData, saveLatestPresalesData } from '../lib/presalesHistory';
 
-/** 应用 Tab 类型（统一枚举，避免散落字符串） */
+/** 顶层模块与销售子页分离，避免不同驾驶舱的状态互相覆盖。 */
+export type ModuleKey = 'sales' | 'presales' | 'workbench';
 export type TabKey = 'ppl' | 'summary' | 'activity' | 'keyCustomers';
 
 const emptyFilters: Filters = {
@@ -16,6 +18,9 @@ const emptyFilters: Filters = {
 interface DataStore {
   // === 数据 ===
   data: DashboardData | null;
+  salesData: DashboardData | null;
+  presalesData: DashboardData | null;
+  previousPresalesData: DashboardData | null;
 
   // === 筛选/搜索状态 ===
   filters: Filters;
@@ -24,6 +29,7 @@ interface DataStore {
   customerQuery: string;
 
   // === UI 状态 ===
+  activeModule: ModuleKey;
   activeTab: TabKey;
   loading: boolean;
   error: string;
@@ -34,6 +40,8 @@ interface DataStore {
 
   // === Actions：数据 ===
   setData: (data: DashboardData) => void;
+  setSalesData: (data: DashboardData) => void;
+  setPresalesData: (data: DashboardData) => void;
   clearData: () => void;
 
   // === Actions：筛选 ===
@@ -47,6 +55,7 @@ interface DataStore {
   resetAll: () => void;
 
   // === Actions：UI ===
+  setActiveModule: (module: ModuleKey) => void;
   setActiveTab: (tab: TabKey) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string) => void;
@@ -58,10 +67,14 @@ interface DataStore {
 
 export const useDataStore = create<DataStore>((set) => ({
   data: null,
+  salesData: null,
+  presalesData: null,
+  previousPresalesData: null,
   filters: emptyFilters,
   drillFilters: [],
   search: '',
   customerQuery: '',
+  activeModule: 'sales',
   activeTab: 'ppl',
   loading: false,
   error: '',
@@ -71,6 +84,7 @@ export const useDataStore = create<DataStore>((set) => ({
   setData: (data) =>
     set({
       data,
+      salesData: data,
       filters: emptyFilters,
       drillFilters: [],
       search: '',
@@ -78,9 +92,40 @@ export const useDataStore = create<DataStore>((set) => ({
       keyCustomerInput: '',
       error: '',
     }),
+  // 销售模块导入：只重置销售模块的筛选状态，不动售前模块的任何数据。
+  setSalesData: (data) =>
+    set({
+      data,
+      salesData: data,
+      filters: emptyFilters,
+      drillFilters: [],
+      search: '',
+      customerQuery: '',
+      keyCustomerInput: '',
+      error: '',
+    }),
+  // 售前模块导入：完全独立于销售模块，保留销售数据。
+  // 同时把"上一版"售前数据滚动到 previousPresalesData，供周对比使用。
+  setPresalesData: (data) => {
+    const previousPresalesData = readLatestPresalesData();
+    const saveResult = saveLatestPresalesData(data);
+    const warning = saveResult.warning;
+    set({
+      presalesData: data,
+      previousPresalesData,
+      error: '',
+    });
+    // 静默失败的场合才主动写一条 warning（setError 会打断用户）
+    if (warning) {
+      console.warn('[PresalesHistory]', warning);
+    }
+  },
   clearData: () =>
     set({
       data: null,
+      salesData: null,
+      presalesData: null,
+      previousPresalesData: null,
       filters: emptyFilters,
       drillFilters: [],
       search: '',
@@ -105,6 +150,7 @@ export const useDataStore = create<DataStore>((set) => ({
   setCustomerQuery: (customerQuery) => set({ customerQuery }),
   resetAll: () => set({ filters: emptyFilters, drillFilters: [], search: '', customerQuery: '' }),
 
+  setActiveModule: (activeModule) => set({ activeModule }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),

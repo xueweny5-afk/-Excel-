@@ -6,6 +6,9 @@ import { useDataStore } from '../stores/dataStore';
 export function resetStore() {
   useDataStore.setState({
     data: null,
+    salesData: null,
+    presalesData: null,
+    previousPresalesData: null,
     filters: {
       owner: '',
       industryLevel1: '',
@@ -17,6 +20,7 @@ export function resetStore() {
     drillFilters: [],
     search: '',
     customerQuery: '',
+    activeModule: 'sales',
     activeTab: 'ppl',
     loading: false,
     error: '',

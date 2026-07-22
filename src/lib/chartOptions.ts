@@ -106,7 +106,7 @@ export function barOption(
           color: chartColors.textSecondary,
           fontSize: 12,
           formatter: ({ value }: { value: number }) =>
-            `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 万`,
+            `${Math.round(value).toLocaleString('zh-CN')} 万`,
         },
       },
     ],

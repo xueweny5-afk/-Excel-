@@ -6,7 +6,7 @@ interface ImportReportPanelProps {
 
 /** 导入结果/字段识别/提示 三栏报告面板 */
 export function ImportReportPanel({ report }: ImportReportPanelProps) {
-  const summary = `PPL 明细 ${report.pplRows} 行，数据汇总 ${report.summaryRows} 行，活动记录 ${report.activityRows} 行，跳过 ${report.skippedRows} 行`;
+  const summary = `PPL 明细 ${report.pplRows} 行，数据汇总 ${report.summaryRows} 行，业绩明细 ${report.performanceRows} 行，活动记录 ${report.activityRows} 行，跳过 ${report.skippedRows} 行`;
   const fields = report.detectedFields.slice(0, 7).join(' / ') || '未识别到字段';
   const hints = [...report.missingFields.map((item) => `缺少 ${item}`), ...report.warnings];
 
