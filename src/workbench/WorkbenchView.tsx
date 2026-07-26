@@ -32,6 +32,7 @@ import {
 import { createQuickWorkEvent } from './eventUtils';
 import type {
   Person,
+  CustomerMapping,
   TestProject,
   WorkEvent,
   WorkParticipant,
@@ -41,7 +42,12 @@ import type {
   WorkbenchData,
   WorkbenchModule,
 } from './domain';
-import { buildWorkloadStats, formatDuration } from './statistics';
+import {
+  buildWorkloadStats,
+  formatDuration,
+  type CustomerMatchReason,
+  type CustomerWorkloadItem,
+} from './statistics';
 import './workbench.css';
 
 type WorkbenchPage = 'calendar' | 'statistics' | 'settings';
@@ -252,7 +258,9 @@ export function WorkbenchView() {
         </div>
       )}
       {!loading && page === 'calendar' && <CalendarPage data={data} reload={reload} setError={setError} />}
-      {!loading && page === 'statistics' && <StatisticsPage data={data} />}
+      {!loading && page === 'statistics' && (
+        <StatisticsPage data={data} reload={reload} setError={setError} />
+      )}
       {!loading && page === 'settings' && <SettingsPage data={data} reload={reload} setError={setError} />}
     </section>
   );
@@ -309,6 +317,10 @@ function CalendarPage({
   );
 
   const activePeople = data.people.filter((item) => item.status === 'active');
+  const selectedDayEvents = useMemo(
+    () => visibleEvents.filter((event) => event.startAt.slice(0, 10) === cursorDate),
+    [cursorDate, visibleEvents],
+  );
 
   useEffect(() => {
     if (!inlineComposerDate) return;
@@ -547,7 +559,7 @@ function CalendarPage({
           />
           <DayWorkPanel
             date={cursorDate}
-            events={visibleEvents.filter((event) => event.startAt.slice(0, 10) === cursorDate)}
+            events={selectedDayEvents}
             workTypes={data.workTypes}
             quickContent={quickContent}
             quickSaving={quickSaving}
@@ -620,7 +632,7 @@ function CalendarBody({
   togglingEventId: string | null;
   draggingEventId: string | null;
   dropTargetDate: string | null;
-  onSelect: (date: string) => void;
+  onSelect: (date: string, openInlineComposer?: boolean) => void;
   onQuickContentChange: (value: string) => void;
   onQuickSave: (date: string) => void;
   onCloseQuickAdd: () => void;
@@ -631,7 +643,18 @@ function CalendarBody({
   onDragOverDate: (date: string | null) => void;
   onMoveEvent: (event: WorkEvent, date: string) => void;
 }) {
-  const typeMap = new Map(workTypes.map((item) => [item.id, item]));
+  const typeMap = useMemo(() => new Map(workTypes.map((item) => [item.id, item])), [workTypes]);
+  const eventsByDate = useMemo(() => {
+    const grouped = new Map<string, WorkEvent[]>();
+    events.forEach((event) => {
+      const date = event.startAt.slice(0, 10);
+      const existing = grouped.get(date);
+      if (existing) existing.push(event);
+      else grouped.set(date, [event]);
+    });
+    return grouped;
+  }, [events]);
+
   if (view === 'month') {
     const dates = monthGridDates(cursorDate);
     const cursorMonth = parseLocalDate(cursorDate).getMonth();
@@ -644,7 +667,7 @@ function CalendarBody({
         ))}
         {dates.map((date, index) => {
           const dateText = toDateText(date);
-          const dayEvents = events.filter((event) => event.startAt.slice(0, 10) === dateText);
+          const dayEvents = eventsByDate.get(dateText) ?? [];
           const isComposing = inlineComposerDate === dateText;
           const isDropTarget = draggingEventId !== null && dropTargetDate === dateText;
           return (
@@ -675,8 +698,10 @@ function CalendarBody({
             >
               <button
                 className="calendar-cell-select"
-                aria-label={`选择 ${dateText} 并新增工作`}
-                onClick={() => onSelect(dateText)}
+                aria-label={`选择 ${dateText}`}
+                title="双击可快速新增工作"
+                onClick={() => onSelect(dateText, false)}
+                onDoubleClick={() => onSelect(dateText, true)}
               >
                 <span>{date.getDate()}</span>
               </button>
@@ -696,7 +721,10 @@ function CalendarBody({
                 className="calendar-day-events"
                 aria-label={`${dateText} 工作列表`}
                 onClick={(event) => {
-                  if (event.target === event.currentTarget) onSelect(dateText);
+                  if (event.target === event.currentTarget) onSelect(dateText, false);
+                }}
+                onDoubleClick={(event) => {
+                  if (event.target === event.currentTarget) onSelect(dateText, true);
                 }}
               >
                 {dayEvents.map((event) => (
@@ -726,13 +754,15 @@ function CalendarBody({
     <div className={`agenda-calendar ${view}`}>
       {dates.map((date) => {
         const dateText = toDateText(date);
-        const dayEvents = events.filter((event) => event.startAt.slice(0, 10) === dateText);
+        const dayEvents = eventsByDate.get(dateText) ?? [];
         const isComposing = inlineComposerDate === dateText;
         return (
           <section key={dateText} className={`agenda-day ${isComposing ? 'composing' : ''}`}>
             <button
               className={`agenda-date ${dateText === cursorDate ? 'selected' : ''}`}
-              onClick={() => onSelect(dateText)}
+              title="双击可快速新增工作"
+              onClick={() => onSelect(dateText, false)}
+              onDoubleClick={() => onSelect(dateText, true)}
             >
               <span>{['日', '一', '二', '三', '四', '五', '六'][date.getDay()]}</span>
               <strong>{date.getDate()}</strong>
@@ -751,7 +781,11 @@ function CalendarBody({
                 />
               )}
               {dayEvents.length === 0 && (
-                <button className="agenda-empty" onClick={() => onSelect(dateText)} hidden={isComposing}>
+                <button
+                  className="agenda-empty"
+                  onClick={() => onSelect(dateText, true)}
+                  hidden={isComposing}
+                >
                   点击新增工作
                 </button>
               )}
@@ -978,12 +1012,23 @@ function EventPill({
       <button
         className="work-event-complete"
         type="button"
-        aria-label={completed ? `恢复“${event.title}”为计划中` : `标记“${event.title}”为已完成`}
+        draggable={false}
+        aria-label={completed ? `取消勾选“${event.title}”` : `勾选“${event.title}”为已完成`}
         aria-pressed={completed}
+        title={completed ? '点击恢复为未完成' : '点击勾选为已完成'}
         disabled={toggling}
-        onClick={onToggleComplete}
+        onPointerDown={(clickEvent) => clickEvent.stopPropagation()}
+        onMouseDown={(clickEvent) => clickEvent.stopPropagation()}
+        onDragStart={(dragEvent) => {
+          dragEvent.preventDefault();
+          dragEvent.stopPropagation();
+        }}
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          onToggleComplete();
+        }}
       >
-        <Check size={11} strokeWidth={3} />
+        {completed && <Check size={11} strokeWidth={3} />}
       </button>
     </div>
   );
@@ -1119,9 +1164,15 @@ function EventDrawer({
       let customerId = draft.customerId;
       let customerNameSnapshot = data.customers.find((item) => item.id === customerId)?.canonicalName ?? '';
       if (customerId === '__temporary__') {
-        const temporary = await createTemporaryCustomer(draft.temporaryCustomerName);
-        customerId = temporary.id;
-        customerNameSnapshot = temporary.canonicalName;
+        const matchedCustomer = findUniqueCustomerMatch(draft.temporaryCustomerName, data.customers);
+        if (matchedCustomer) {
+          customerId = matchedCustomer.id;
+          customerNameSnapshot = matchedCustomer.canonicalName;
+        } else {
+          const temporary = await createTemporaryCustomer(draft.temporaryCustomerName);
+          customerId = temporary.id;
+          customerNameSnapshot = temporary.canonicalName;
+        }
       }
       const opportunity = data.opportunities.find((item) => item.id === draft.opportunityId);
       let testProjectId = draft.testProjectId;
@@ -1147,12 +1198,7 @@ function EventDrawer({
       }
 
       const startAt = draft.allDay ? `${draft.date}T00:00:00` : `${draft.date}T${draft.startTime}:00`;
-      let endAt = draft.allDay ? `${draft.date}T23:59:59` : `${draft.date}T${draft.endTime}:00`;
-      if (!draft.allDay && endAt <= startAt) {
-        const nextDay = parseLocalDate(draft.date);
-        nextDay.setDate(nextDay.getDate() + 1);
-        endAt = `${toDateText(nextDay)}T${draft.endTime}:00`;
-      }
+      const endAt = draft.allDay ? `${draft.date}T23:59:59` : `${draft.date}T${draft.endTime}:00`;
       const eventId = event?.id ?? newId();
       const nextEvent: WorkEvent = {
         id: eventId,
@@ -1212,9 +1258,7 @@ function EventDrawer({
   async function removeEvent() {
     if (
       !event ||
-      !window.confirm(
-        `确认永久删除“${event.title}”吗？删除后无法恢复，相关人员投入和历史版本也会一并删除。`,
-      )
+      !window.confirm(`确认永久删除“${event.title}”吗？删除后无法恢复，相关人员投入和历史版本也会一并删除。`)
     )
       return;
     setSaving(true);
@@ -1571,6 +1615,15 @@ function fuzzyOptionMatches(option: FuzzyOption, query: string) {
   });
 }
 
+function findUniqueCustomerMatch(name: string, customers: CustomerMapping[]) {
+  const normalizedName = normalizeBusinessName(name);
+  if (!normalizedName) return undefined;
+  const matches = customers.filter((customer) =>
+    matchesCustomerSearch(name, [customer.canonicalName, ...customer.aliases]),
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function isSubsequence(query: string, target: string) {
   let cursor = 0;
   for (const char of target) {
@@ -1580,23 +1633,43 @@ function isSubsequence(query: string, target: string) {
   return false;
 }
 
-function StatisticsPage({ data }: { data: WorkbenchData }) {
+function StatisticsPage({
+  data,
+  reload,
+  setError,
+}: {
+  data: WorkbenchData;
+  reload: () => Promise<void>;
+  setError: (message: string) => void;
+}) {
   const [personId, setPersonId] = useState('');
   const [workTypeId, setWorkTypeId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [selectedCustomerKey, setSelectedCustomerKey] = useState<string | null>(null);
+  const [editing, setEditing] = useState<WorkEvent | undefined>(undefined);
   const stats = useMemo(
     () =>
-      buildWorkloadStats(data.events, data.participants, data.people, data.workTypes, {
-        personId,
-        workTypeId,
-        from,
-        to,
-      }),
+      buildWorkloadStats(
+        data.events,
+        data.participants,
+        data.people,
+        data.workTypes,
+        data.customers,
+        data.opportunities,
+        {
+          personId,
+          workTypeId,
+          from,
+          to,
+        },
+      ),
     [data, from, personId, to, workTypeId],
   );
+  const selectedCustomer = stats.customers.find((item) => item.key === selectedCustomerKey);
   const maxPersonMinutes = Math.max(1, ...stats.people.map((item) => item.minutes));
   const maxTypeMinutes = Math.max(1, ...stats.types.map((item) => item.minutes));
+  const maxCustomerMinutes = Math.max(1, ...stats.customers.map((item) => item.minutes));
   return (
     <div className="workbench-statistics">
       <section className="workbench-filter-card">
@@ -1635,7 +1708,11 @@ function StatisticsPage({ data }: { data: WorkbenchData }) {
         <StatCard label="已完成团队工作" value={`${stats.teamEventCount} 次`} hint="按事件编号去重" />
         <StatCard label="个人参与次数" value={`${stats.personalEventCount} 次`} hint="每位参与人分别计次" />
         <StatCard label="总投入时长" value={formatDuration(stats.totalMinutes)} hint="按人员实际投入求和" />
-        <StatCard label="覆盖客户" value={`${stats.customerCount} 个`} hint="按持久化客户编号去重" />
+        <StatCard
+          label="覆盖商机客户"
+          value={`${stats.customerCount} 个`}
+          hint={`其他客户 ${stats.otherCustomerCount} 个 · 未关联工作 ${stats.unlinkedEventCount} 条`}
+        />
         <StatCard label="客户拜访" value={`${stats.visitCount} 次`} hint="仅已完成客户拜访" />
       </section>
       <div className="workbench-analysis-grid">
@@ -1673,8 +1750,175 @@ function StatisticsPage({ data }: { data: WorkbenchData }) {
           )}
         </section>
       </div>
+      <section className="workbench-panel customer-workload-panel">
+        <div className="customer-workload-title">
+          <div>
+            <h2>客户工作量分布</h2>
+            <p>自动关联曾导入且拥有商机的客户；点击任一项查看工作明细。</p>
+          </div>
+        </div>
+        {stats.customers.length === 0 ? (
+          <EmptyAnalysis />
+        ) : (
+          stats.customers.map((item) => (
+            <BarRow
+              key={item.key}
+              label={item.name}
+              value={item.minutes}
+              max={maxCustomerMinutes}
+              detail={`${item.eventCount} 次 · ${formatDuration(item.minutes)}`}
+              color={customerWorkloadColor(item.category)}
+              onClick={() => setSelectedCustomerKey(item.key)}
+            />
+          ))
+        )}
+      </section>
+      {selectedCustomer && !editing && (
+        <CustomerWorkloadDrawer
+          item={selectedCustomer}
+          data={data}
+          customerMatches={stats.customerMatches}
+          onClose={() => setSelectedCustomerKey(null)}
+          onOpenEvent={(event) => setEditing(event)}
+        />
+      )}
+      {editing && (
+        <EventDrawer
+          event={editing}
+          defaultDate={editing.startAt.slice(0, 10)}
+          data={data}
+          onClose={() => setEditing(undefined)}
+          onSaved={async () => {
+            await reload();
+            setEditing(undefined);
+          }}
+          setError={setError}
+        />
+      )}
     </div>
   );
+}
+
+function CustomerWorkloadDrawer({
+  item,
+  data,
+  customerMatches,
+  onClose,
+  onOpenEvent,
+}: {
+  item: CustomerWorkloadItem;
+  data: WorkbenchData;
+  customerMatches: ReturnType<typeof buildWorkloadStats>['customerMatches'];
+  onClose: () => void;
+  onOpenEvent: (event: WorkEvent) => void;
+}) {
+  const events = item.eventIds
+    .map((eventId) => data.events.find((event) => event.id === eventId))
+    .filter((event): event is WorkEvent => Boolean(event))
+    .sort((a, b) => b.startAt.localeCompare(a.startAt));
+  const peopleById = new Map(data.people.map((person) => [person.id, person]));
+  const typesById = new Map(data.workTypes.map((type) => [type.id, type]));
+  const customersById = new Map(data.customers.map((customer) => [customer.id, customer]));
+  const opportunitiesById = new Map(data.opportunities.map((opportunity) => [opportunity.id, opportunity]));
+
+  return (
+    <>
+      <button className="drawer-backdrop" aria-label="关闭客户工作明细" onClick={onClose} />
+      <aside className="drawer workbench-drawer customer-workload-drawer" aria-label={`${item.name}工作明细`}>
+        <button className="drawer-close" aria-label="关闭" onClick={onClose}>
+          <X size={20} />
+        </button>
+        <p className="eyebrow">Customer Workload</p>
+        <h2>{item.name}</h2>
+        <p className="customer-workload-summary">
+          {item.eventCount} 次工作 · {formatDuration(item.minutes)}
+        </p>
+        <div className="customer-detail-header" aria-hidden="true">
+          <span>工作</span>
+          <span>人员与投入</span>
+          <span>客户与商机</span>
+          <span>归类依据</span>
+        </div>
+        <div className="customer-detail-list">
+          {events.map((event) => {
+            const participants = data.participants.filter((participant) => participant.eventId === event.id);
+            const participantText =
+              participants
+                .map((participant) => {
+                  const person = peopleById.get(participant.personId);
+                  return `${person?.name ?? '已停用人员'} ${formatDuration(participant.actualMinutes)}`;
+                })
+                .join('、') || '未填写人员与投入';
+            const linkedCustomer = event.customerId ? customersById.get(event.customerId) : undefined;
+            const opportunity = event.opportunityId ? opportunitiesById.get(event.opportunityId) : undefined;
+            const match = customerMatches[event.id];
+            const originalCustomer =
+              event.customerNameSnapshot || linkedCustomer?.canonicalName || '未填写客户';
+            return (
+              <button
+                key={event.id}
+                type="button"
+                className="customer-detail-row"
+                aria-label={`打开工作详情：${event.title}`}
+                onClick={() => onOpenEvent(event)}
+              >
+                <span>
+                  <strong>{event.title}</strong>
+                  <small>
+                    {event.startAt.slice(0, 10)} ·{' '}
+                    {event.workTypeId
+                      ? (typesById.get(event.workTypeId)?.name ?? '已停用类型')
+                      : '未填写类型'}
+                  </small>
+                </span>
+                <span>{participantText}</span>
+                <span>
+                  <strong>{originalCustomer}</strong>
+                  <small>
+                    {(opportunity?.canonicalName ?? event.opportunityNameSnapshot) || '未关联商机'}
+                  </small>
+                </span>
+                <span>
+                  <em className={`customer-match-badge ${match?.reason ?? 'missing'}`}>
+                    {customerMatchReasonLabel(match?.reason ?? 'missing')}
+                  </em>
+                  {match?.reason === 'ambiguous' && (
+                    <small>{formatCandidateCustomers(match.candidateCustomerIds, customersById)}</small>
+                  )}
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function customerWorkloadColor(category: CustomerWorkloadItem['category']) {
+  if (category === 'other') return '#64748b';
+  if (category === 'unlinked') return '#94a3b8';
+  return '#2563eb';
+}
+
+function customerMatchReasonLabel(reason: CustomerMatchReason) {
+  const labels: Record<CustomerMatchReason, string> = {
+    opportunity: '关联商机',
+    customer: '已关联商机客户',
+    fuzzy: '名称唯一模糊命中',
+    unmatched: '未命中商机客户',
+    ambiguous: '存在多个候选客户',
+    missing: '工作未填写客户',
+  };
+  return labels[reason];
+}
+
+function formatCandidateCustomers(customerIds: string[], customersById: Map<string, CustomerMapping>) {
+  const names = customerIds
+    .map((customerId) => customersById.get(customerId)?.canonicalName)
+    .filter((name): name is string => Boolean(name));
+  return names.length > 0 ? `候选：${names.join('、')}` : '';
 }
 
 function SettingsPage({
@@ -1938,22 +2182,37 @@ function BarRow({
   max,
   detail,
   color = '#2563eb',
+  onClick,
 }: {
   label: string;
   value: number;
   max: number;
   detail: string;
   color?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="workbench-bar-row">
+  const content = (
+    <>
       <span>{label}</span>
       <i>
         <b style={{ width: `${Math.max(3, (value / max) * 100)}%`, background: color }} />
       </i>
       <strong>{detail}</strong>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className="workbench-bar-row interactive"
+        aria-label={`查看${label}工作明细`}
+        onClick={onClick}
+      >
+        {content}
+      </button>
+    );
+  }
+  return <div className="workbench-bar-row">{content}</div>;
 }
 
 function EmptyAnalysis() {
@@ -2005,6 +2264,7 @@ function validateDraft(draft: EventDraft, isTestWork: boolean) {
   if (!draft.title.trim()) return '请填写工作标题。';
   if (!draft.date) return '请选择工作日期。';
   if (!draft.allDay && (!draft.startTime || !draft.endTime)) return '请填写完整的开始和结束时间。';
+  if (!draft.allDay && draft.endTime <= draft.startTime) return '结束时间必须晚于开始时间。';
   if (draft.ownerId && !draft.selectedParticipantIds.includes(draft.ownerId))
     return '负责人必须包含在参与人员中。';
   if (new Set(draft.selectedParticipantIds).size !== draft.selectedParticipantIds.length)

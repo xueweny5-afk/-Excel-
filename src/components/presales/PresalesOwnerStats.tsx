@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react';
 import type { PresalesAnalysis } from '../../lib/presalesMetrics';
 import { exportOwnerStatsCsv, filterOwnerStats, summarizeStats, type CustomerStats } from '../../lib/presalesOwnerStats';
 import { formatMoney } from '../../lib/formatters';
-import { DashboardCard } from '../common/DashboardCard';
 import { StatusCard } from '../common/StatusCard';
+import { SummaryKpi, downloadBlob, todayStamp } from './_shared';
 
 interface PresalesOwnerStatsProps {
   analysis: PresalesAnalysis;
@@ -125,34 +125,4 @@ export function PresalesOwnerStats({ analysis }: PresalesOwnerStatsProps) {
       )}
     </>
   );
-}
-
-function SummaryKpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <DashboardCard title={label}>
-      <div className="owner-summary-value">
-        <strong>{value}</strong>
-        {unit && <span>{unit}</span>}
-      </div>
-    </DashboardCard>
-  );
-}
-
-function downloadBlob(content: string, fileName: string) {
-  // 添加 UTF-8 BOM 确保 Excel 打开中文不乱码
-  const blob = new Blob(['﻿', content], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function todayStamp(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}`;
 }

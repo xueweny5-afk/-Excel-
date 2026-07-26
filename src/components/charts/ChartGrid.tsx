@@ -1,16 +1,15 @@
 import type { PPLRecord, DrillField } from '../../domain';
 import { useChartAggregations } from '../../hooks/useChartAggregations';
 import { barOption, chartColors, quarterOption } from '../../lib/chartOptions';
-import { formatMoney } from '../../lib/formatters';
 import { ChartCard } from './ChartCard';
 import { DistributionCard } from './DistributionCard';
 import { HealthCard } from './HealthCard';
+import { topInsight, shareInsight } from './_insights';
 
 interface ChartGridProps {
   data: PPLRecord[];
   onDrill: (field: DrillField, value: string) => void;
 }
-
 /** 主图表区：5 张图表（销售/行业/产品/季度/健康度） */
 export function ChartGrid({ data, onDrill }: ChartGridProps) {
   const aggregations = useChartAggregations(data);
@@ -49,16 +48,4 @@ export function ChartGrid({ data, onDrill }: ChartGridProps) {
       />
     </section>
   );
-}
-
-function topInsight(items: Array<{ name: string; value: number }>, empty: string) {
-  const top = [...items].sort((a, b) => b.value - a.value)[0];
-  return top ? `${top.name} 最高，金额 ${formatMoney(top.value)}` : empty;
-}
-
-function shareInsight(items: Array<{ name: string; value: number }>, label: string) {
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  const top = [...items].sort((a, b) => b.value - a.value)[0];
-  if (!top || total === 0) return `暂无${label}数据`;
-  return `${top.name} 占比 ${((top.value / total) * 100).toFixed(0)}%，结构${top.value / total > 0.7 ? '较集中' : '较均衡'}`;
 }

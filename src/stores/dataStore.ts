@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import type { DashboardData, DrillField, DrillFilter, Filters } from '../domain';
-import { readLatestPresalesData, saveLatestPresalesData } from '../lib/presalesHistory';
+import type { PresalesVersionSummary } from '../lib/presalesVersionHistory';
 
 /** 顶层模块与销售子页分离，避免不同驾驶舱的状态互相覆盖。 */
-export type ModuleKey = 'sales' | 'presales' | 'workbench';
+export type ModuleKey = 'sales' | 'presales' | 'workbench' | 'performanceStats';
 export type TabKey = 'ppl' | 'summary' | 'activity' | 'keyCustomers';
 
 const emptyFilters: Filters = {
@@ -21,6 +21,7 @@ interface DataStore {
   salesData: DashboardData | null;
   presalesData: DashboardData | null;
   previousPresalesData: DashboardData | null;
+  presalesVersions: PresalesVersionSummary[];
 
   // === 筛选/搜索状态 ===
   filters: Filters;
@@ -42,6 +43,11 @@ interface DataStore {
   setData: (data: DashboardData) => void;
   setSalesData: (data: DashboardData) => void;
   setPresalesData: (data: DashboardData) => void;
+  setPresalesHistory: (
+    current: DashboardData | null,
+    previous: DashboardData | null,
+    versions: PresalesVersionSummary[],
+  ) => void;
   clearData: () => void;
 
   // === Actions：筛选 ===
@@ -70,6 +76,7 @@ export const useDataStore = create<DataStore>((set) => ({
   salesData: null,
   presalesData: null,
   previousPresalesData: null,
+  presalesVersions: [],
   filters: emptyFilters,
   drillFilters: [],
   search: '',
@@ -104,28 +111,17 @@ export const useDataStore = create<DataStore>((set) => ({
       keyCustomerInput: '',
       error: '',
     }),
-  // 售前模块导入：完全独立于销售模块，保留销售数据。
-  // 同时把"上一版"售前数据滚动到 previousPresalesData，供周对比使用。
-  setPresalesData: (data) => {
-    const previousPresalesData = readLatestPresalesData();
-    const saveResult = saveLatestPresalesData(data);
-    const warning = saveResult.warning;
-    set({
-      presalesData: data,
-      previousPresalesData,
-      error: '',
-    });
-    // 静默失败的场合才主动写一条 warning（setError 会打断用户）
-    if (warning) {
-      console.warn('[PresalesHistory]', warning);
-    }
-  },
+  // 售前模块导入：完全独立于销售模块，版本持久化由导入链路完成。
+  setPresalesData: (data) => set({ presalesData: data, error: '' }),
+  setPresalesHistory: (presalesData, previousPresalesData, presalesVersions) =>
+    set({ presalesData, previousPresalesData, presalesVersions, error: '' }),
   clearData: () =>
     set({
       data: null,
       salesData: null,
       presalesData: null,
       previousPresalesData: null,
+      presalesVersions: [],
       filters: emptyFilters,
       drillFilters: [],
       search: '',

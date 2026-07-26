@@ -2,13 +2,14 @@ import { useMemo } from 'react';
 import { useDataStore } from '../stores/dataStore';
 import { calculateKpis, filterPpl } from '../lib/analyzer';
 import type { KPISummary } from '../lib/analyzer';
+import { EMPTY_PPL } from '../lib/constants';
 
 /**
  * 派生筛选后的 PPL 数据 + KPI。
  * 所有组件都从这里消费，避免每个组件各自 useMemo 重复计算。
  */
 export function useFilteredPpl() {
-  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_ARRAY);
+  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_PPL);
   const filters = useDataStore((s) => s.filters);
   const drillFilters = useDataStore((s) => s.drillFilters);
   const search = useDataStore((s) => s.search);
@@ -23,5 +24,3 @@ export function useFilteredPpl() {
 
   return { rawPpl, filteredPpl, kpis: kpis as KPISummary };
 }
-
-const EMPTY_ARRAY: never[] = [];

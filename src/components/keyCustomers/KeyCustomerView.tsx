@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Download } from 'lucide-react';
 import { analyzeKeyCustomers, exportKeyCustomerCsv } from '../../lib/customerAnalyzer';
 import { useDataStore } from '../../stores/dataStore';
+import { EMPTY_PPL, EMPTY_ACTIVITY } from '../../lib/constants';
 import { StatusCard } from '../common/StatusCard';
 import { KeyCustomerKpis } from './KeyCustomerKpis';
 import { KeyCustomerCharts } from './KeyCustomerCharts';
@@ -13,7 +14,7 @@ import { UnmatchedCustomerTable } from '../tables/UnmatchedCustomerTable';
 export function KeyCustomerView() {
   const input = useDataStore((s) => s.keyCustomerInput);
   const setInput = useDataStore((s) => s.setKeyCustomerInput);
-  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_ARRAY);
+  const rawPpl = useDataStore((s) => s.salesData?.ppl ?? EMPTY_PPL);
   const activity = useDataStore((s) => s.salesData?.activity ?? EMPTY_ACTIVITY);
 
   const analysis = useMemo(() => analyzeKeyCustomers(input, rawPpl, activity), [input, rawPpl, activity]);
@@ -115,9 +116,7 @@ export function KeyCustomerView() {
   );
 }
 
-const EMPTY_ARRAY: never[] = [];
-const EMPTY_ACTIVITY: never[] = [];
-
 function formatPercentLocal(value: number) {
-  return `${(value * 100).toFixed(0)}%`;
+  if (!Number.isFinite(value)) return '—';
+  return `${Math.round(value * 100)}%`;
 }

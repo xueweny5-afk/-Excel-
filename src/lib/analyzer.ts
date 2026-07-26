@@ -24,6 +24,17 @@ export interface AggregatedPplRow {
   riskCount: number;
 }
 
+/**
+ * DrillFilter 字段值匹配：考虑字段类型。
+ * 字符串字段用 ===；其他类型（数字、布尔、联合字符串）做 String 统一比较避免 `0` vs `'0'` 误判。
+ */
+function drillMatches(row: PPLRecord, filter: DrillFilter): boolean {
+  const raw = row[filter.field];
+  if (raw === undefined || raw === null) return filter.value === '';
+  // 数值字段（含 0）必须字符串相等，避免 0/'' 互判
+  return String(raw) === filter.value;
+}
+
 export function filterPpl(
   data: PPLRecord[],
   filters: Partial<Filters>,
@@ -41,7 +52,7 @@ export function filterPpl(
       (!filters.expectedQuarter || row.expectedQuarter === filters.expectedQuarter) &&
       (!filters.status || row.status === filters.status) &&
       (!filters.forecastType || row.forecastType === filters.forecastType);
-    const drillOk = drillFilters.every((filter) => String(row[filter.field]) === filter.value);
+    const drillOk = drillFilters.every((filter) => drillMatches(row, filter));
     const searchOk =
       !keyword ||
       [row.owner, row.customerName, row.opportunityName, row.product, row.industryLevel1].some((value) =>

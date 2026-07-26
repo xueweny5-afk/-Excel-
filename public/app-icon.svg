@@ -1,21 +1,79 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="销售工作台">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="销售驾驶舱">
   <defs>
-    <linearGradient id="bg" x1="28" y1="18" x2="228" y2="238" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2563eb" />
-      <stop offset="1" stop-color="#0f766e" />
+    <!-- 背景主渐变：紫蓝 → 蓝 → 青 -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
     </linearGradient>
-    <linearGradient id="card" x1="70" y1="66" x2="196" y2="190" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.98" />
-      <stop offset="1" stop-color="#dbeafe" stop-opacity="0.92" />
+
+    <!-- 玻璃卡片渐变：顶部更亮，底部更透 -->
+    <linearGradient id="glassGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.10"/>
     </linearGradient>
+
+    <!-- 柱状图渐变：顶部白，底部 45% -->
+    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.45"/>
+    </linearGradient>
+
+    <!-- 折线渐变：暖白 → 金 -->
+    <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+
+    <!-- 柔光圆 -->
+    <radialGradient id="ambient" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- 折线终点光晕 -->
+    <radialGradient id="dotGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#fde68a" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect width="256" height="256" rx="54" fill="url(#bg)" />
-  <path d="M70 74a18 18 0 0 1 18-18h80l34 34v92a18 18 0 0 1-18 18H88a18 18 0 0 1-18-18V74Z" fill="url(#card)" />
-  <path d="M168 56v27a11 11 0 0 0 11 11h23" fill="none" stroke="#60a5fa" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M96 116h78M96 146h78M96 176h52" stroke="#1d4ed8" stroke-width="13" stroke-linecap="round" />
-  <circle cx="82" cy="116" r="8" fill="#14b8a6" />
-  <circle cx="82" cy="146" r="8" fill="#14b8a6" />
-  <circle cx="82" cy="176" r="8" fill="#14b8a6" />
-  <path d="M42 58h42M42 84h28" stroke="#bfdbfe" stroke-width="12" stroke-linecap="round" opacity="0.72" />
-  <path d="M176 210h34" stroke="#99f6e4" stroke-width="12" stroke-linecap="round" opacity="0.8" />
+
+  <!-- 1. 主背景：圆角渐变矩形 -->
+  <rect width="256" height="256" rx="56" fill="url(#bgGrad)"/>
+
+  <!-- 2. 环境光：右上柔光 + 左下柔光 -->
+  <circle cx="212" cy="44" r="64" fill="url(#ambient)"/>
+  <circle cx="44" cy="220" r="56" fill="url(#ambient)" opacity="0.55"/>
+
+  <!-- 3. 玻璃卡片本体 -->
+  <rect x="44" y="68" width="168" height="120" rx="22" fill="url(#glassGrad)"/>
+  <!-- 描边提亮 -->
+  <rect x="44" y="68" width="168" height="120" rx="22"
+        fill="none" stroke="#ffffff" stroke-opacity="0.38" stroke-width="1.25"/>
+
+  <!-- 4. 顶部 KPI 圆点 -->
+  <circle cx="64" cy="90" r="4" fill="#fbbf24"/>
+  <circle cx="80" cy="90" r="4" fill="#ffffff" fill-opacity="0.55"/>
+  <circle cx="96" cy="90" r="4" fill="#ffffff" fill-opacity="0.55"/>
+
+  <!-- 5. 基线阴影线（卡片底部 1px） -->
+  <line x1="60" y1="172" x2="196" y2="172"
+        stroke="#ffffff" stroke-opacity="0.18" stroke-width="1"/>
+
+  <!-- 6. 柱状图 4 根，递增 -->
+  <rect x="78"  y="148" width="14" height="24" rx="3" fill="url(#barGrad)"/>
+  <rect x="104" y="132" width="14" height="40" rx="3" fill="url(#barGrad)"/>
+  <rect x="130" y="116" width="14" height="56" rx="3" fill="url(#barGrad)"/>
+  <rect x="156" y="100" width="14" height="72" rx="3" fill="url(#barGrad)"/>
+
+  <!-- 7. 上涨折线（贯穿柱顶） -->
+  <polyline points="85,146 111,130 137,114 163,98 192,80"
+            fill="none" stroke="url(#lineGrad)" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round"
+            opacity="0.95"/>
+
+  <!-- 8. 折线终点：光晕 + 圆点 -->
+  <circle cx="192" cy="80" r="10" fill="url(#dotGlow)"/>
+  <circle cx="192" cy="80" r="5"  fill="#fbbf24"/>
+  <circle cx="192" cy="80" r="5"  fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="1"/>
 </svg>

@@ -6,12 +6,13 @@ import {
   exportSalesStatsCsv,
   filterSalesStats,
   getPplRowsByOwner,
+  isT2000Row,
   summarizeSalesStats,
   type SalesDimensionStats,
 } from '../../lib/salesDimensionStats';
-import { formatMoney } from '../../lib/formatters';
-import { DashboardCard } from '../common/DashboardCard';
+import { formatMoney, formatPercent } from '../../lib/formatters';
 import { StatusCard } from '../common/StatusCard';
+import { SummaryKpi, downloadBlob, todayStamp } from './_shared';
 
 interface SalesDimensionStatsProps {
   analysis: PresalesAnalysis;
@@ -142,36 +143,6 @@ export function SalesDimensionStats({ analysis, data }: SalesDimensionStatsProps
   );
 }
 
-function SummaryKpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <DashboardCard title={label}>
-      <div className="owner-summary-value">
-        <strong>{value}</strong>
-        {unit && <span>{unit}</span>}
-      </div>
-    </DashboardCard>
-  );
-}
-
-function downloadBlob(content: string, fileName: string) {
-  // 添加 UTF-8 BOM 确保 Excel 打开中文不乱码
-  const blob = new Blob(['﻿', content], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function todayStamp(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}`;
-}
-
 interface DrillRowProps {
   item: SalesDimensionStats;
   isExpanded: boolean;
@@ -254,9 +225,9 @@ function OwnerPplDetail({ rows, ownerName }: { rows: PPLRecord[]; ownerName: str
                   <td>{row.stage || '—'}</td>
                   <td>{formatMoney(Number(row.amount) || 0)}</td>
                   <td>{row.forecastType || '—'}</td>
-                  <td>{formatPercentLocal(row.winRate)}</td>
+                  <td>{formatPercent(row.winRate)}</td>
                   <td>{row.expectedQuarter || '—'}</td>
-                  <td>{isT2000Ppl(row) ? <span className="presales-status success">T2000</span> : '—'}</td>
+                  <td>{isT2000Row(row) ? <span className="presales-status success">T2000</span> : '—'}</td>
                 </tr>
               ))
             )}
@@ -265,13 +236,4 @@ function OwnerPplDetail({ rows, ownerName }: { rows: PPLRecord[]; ownerName: str
       </div>
     </div>
   );
-}
-
-function isT2000Ppl(row: PPLRecord): boolean {
-  return String(row.t2000CustomerTag ?? '').toLowerCase().includes('t2000');
-}
-
-function formatPercentLocal(value: number): string {
-  if (!Number.isFinite(value)) return '—';
-  return `${Math.round(value * 100)}%`;
 }

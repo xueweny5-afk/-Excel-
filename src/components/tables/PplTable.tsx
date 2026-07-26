@@ -164,6 +164,13 @@ function DetailTable({ rows, onSelect }: { rows: PPLRecord[]; onSelect: (row: PP
  * 泛型 T 仅用于 cell context 类型推断，渲染时统一为 any。
  */
 
+/** 把 TanStack 排序状态翻译成 aria-sort 属性 */
+function ariaSortFor(direction: false | 'asc' | 'desc'): 'none' | 'ascending' | 'descending' {
+  if (direction === 'asc') return 'ascending';
+  if (direction === 'desc') return 'descending';
+  return 'none';
+}
+
 function TableBody<T>({ table, onRowClick }: { table: Table<T>; onRowClick?: (row: T) => void }) {
   return (
     <>
@@ -172,22 +179,63 @@ function TableBody<T>({ table, onRowClick }: { table: Table<T>; onRowClick?: (ro
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
-                {group.headers.map((header) => (
-                  <th key={header.id} onClick={header.column.getToggleSortingHandler()}>
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
+                {group.headers.map((header) => {
+                  const sortHandler = header.column.getToggleSortingHandler();
+                  const canSort = header.column.getCanSort();
+                  const sortDirection = header.column.getIsSorted();
+                  return (
+                    <th
+                      key={header.id}
+                      aria-sort={canSort ? ariaSortFor(sortDirection) : undefined}
+                      onClick={canSort ? sortHandler : undefined}
+                      onKeyDown={
+                        canSort
+                          ? (event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                sortHandler?.(event);
+                              }
+                            }
+                          : undefined
+                      }
+                      tabIndex={canSort ? 0 : undefined}
+                      role={canSort ? 'columnheader button' : 'columnheader'}
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} onClick={onRowClick ? () => onRowClick(row.original) : undefined}>
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-                ))}
-              </tr>
-            ))}
+            {table.getRowModel().rows.map((row) => {
+              const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+                if (!onRowClick) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onRowClick(row.original);
+                }
+              };
+              return (
+                <tr
+                  key={row.id}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={onRowClick ? handleKeyDown : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  aria-label={
+                    onRowClick
+                      ? `查看 ${(row.original as unknown as { customerName?: string })?.customerName ?? '商机'} 详情`
+                      : undefined
+                  }
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -1,0 +1,354 @@
+.performance-module {
+  display: grid;
+  gap: 18px;
+}
+
+.performance-hero,
+.performance-panel,
+.performance-filter-panel {
+  border: 1px solid #e5edf8;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.performance-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px;
+}
+
+.performance-hero p {
+  margin: 0 0 6px;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.performance-hero h1 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 30px;
+}
+
+.performance-hero span,
+.performance-note {
+  color: #64748b;
+}
+
+.performance-actions,
+.performance-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.performance-import-grid,
+.performance-chart-grid,
+.performance-file-grid,
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.performance-import-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px;
+  border: 1px dashed #9db8e8;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #f8fbff, #eef6ff);
+  text-align: center;
+}
+
+.performance-import-card.dragging {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+.performance-import-card h2,
+.performance-import-card p {
+  margin: 0;
+}
+
+.performance-panel {
+  padding: 22px;
+}
+
+.performance-section-title {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.performance-section-title h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.performance-section-title span {
+  color: #64748b;
+}
+
+.performance-file-card,
+.check-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.performance-file-card strong,
+.performance-file-card span,
+.performance-file-card p {
+  display: block;
+  margin: 0 0 4px;
+}
+
+.performance-file-card span {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.performance-file-card p,
+.check-card p,
+.check-card li {
+  color: #64748b;
+}
+
+.performance-file-card em {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-style: normal;
+}
+
+.performance-file-card em.success {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.performance-file-card em.warning,
+.warning-text {
+  color: #d97706;
+}
+
+.performance-file-card em.warning {
+  background: #fef3c7;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.check-card {
+  display: block;
+}
+
+.check-card h3 {
+  margin: 0 0 8px;
+}
+
+.check-card ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding-left: 18px;
+}
+
+.performance-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.performance-filter-panel label,
+.multi-filter {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+}
+
+.performance-fuzzy-filter {
+  position: relative;
+}
+
+.performance-filter-panel select,
+.performance-filter-panel input {
+  min-height: 42px;
+  border: 1px solid #dbe4ef;
+  border-radius: 14px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.performance-fuzzy-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #dbe4ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+.performance-fuzzy-menu button,
+.performance-fuzzy-menu span {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+}
+
+.performance-fuzzy-menu button:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.keyword-field {
+  grid-column: span 2;
+  display: flex !important;
+  align-items: center;
+  grid-template-columns: none !important;
+  border: 1px solid #dbe4ef;
+  border-radius: 14px;
+  padding: 0 12px;
+}
+
+.keyword-field input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+}
+
+.multi-filter div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.multi-filter button {
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.multi-filter button.active,
+.performance-tabs button.active {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.performance-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.performance-tabs button {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.performance-kpis {
+  margin-bottom: 16px;
+}
+
+.performance-chart-grid .wide-card {
+  grid-column: 1 / -1;
+}
+
+.performance-table-wrap {
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.performance-table-wrap table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.performance-table-wrap.compact table {
+  min-width: 760px;
+}
+
+.performance-table-wrap th,
+.performance-table-wrap td {
+  padding: 12px;
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.performance-table-wrap th {
+  color: #475569;
+  background: #f8fafc;
+}
+
+.button.small {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 1200px) {
+  .performance-hero,
+  .performance-section-title {
+    flex-direction: column;
+  }
+
+  .performance-import-grid,
+  .performance-chart-grid,
+  .performance-file-grid,
+  .check-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .performance-filter-panel,
+  .keyword-field {
+    grid-template-columns: 1fr;
+    grid-column: span 1;
+  }
+}
