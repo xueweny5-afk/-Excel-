@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardData, NaCustomer, PerformanceRecord, PPLRecord } from '../../domain';
 import {
+  buildOpportunityProjectStats,
+  buildT2000PipelineMix,
   buildT2000CustomerStats,
+  exportOpportunityProjectStatsCsv,
   exportT2000StatsCsv,
   filterT2000ByType,
   filterT2000Stats,
@@ -93,14 +96,7 @@ function makeData(
 
 describe('buildT2000CustomerStats', () => {
   it('should_use_na_sheet_as_authoritative_t2000_source', () => {
-    const data = makeData(
-      [],
-      [],
-      [
-        makeNa({ customer: '南京证券' }),
-        makeNa({ customer: '苏州银行' }),
-      ],
-    );
+    const data = makeData([], [], [makeNa({ customer: '南京证券' }), makeNa({ customer: '苏州银行' })]);
     const stats = buildT2000CustomerStats(data);
     expect(stats.length).toBe(2);
     expect(stats.map((s) => s.customer).sort()).toEqual(['南京证券', '苏州银行']);
@@ -151,10 +147,7 @@ describe('buildT2000CustomerStats', () => {
     const data = makeData(
       [],
       [],
-      [
-        makeNa({ customer: 'T2000客户', isT2000: true }),
-        makeNa({ customer: '普通NA客户', isT2000: false }),
-      ],
+      [makeNa({ customer: 'T2000客户', isT2000: true }), makeNa({ customer: '普通NA客户', isT2000: false })],
     );
     const stats = buildT2000CustomerStats(data);
     expect(stats.length).toBe(1);
@@ -218,9 +211,57 @@ describe('buildT2000CustomerStats', () => {
 
 describe('filterT2000Stats', () => {
   const sample = [
-    { customer: '南京证券', normalizedCustomer: '南京证券', customerType: 'NA-I', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: 'Q3', opportunityCount: 1, pipelineAmount: 100, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
-    { customer: '南京地铁', normalizedCustomer: '南京地铁', customerType: 'NA-II', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: 'Q3', opportunityCount: 1, pipelineAmount: 200, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
-    { customer: '苏州工业园', normalizedCustomer: '苏州工业园', customerType: 'NA代管', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: 'Q1', opportunityCount: 0, pipelineAmount: 0, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
+    {
+      customer: '南京证券',
+      normalizedCustomer: '南京证券',
+      customerType: 'NA-I',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: 'Q3',
+      opportunityCount: 1,
+      pipelineAmount: 100,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
+    {
+      customer: '南京地铁',
+      normalizedCustomer: '南京地铁',
+      customerType: 'NA-II',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: 'Q3',
+      opportunityCount: 1,
+      pipelineAmount: 200,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
+    {
+      customer: '苏州工业园',
+      normalizedCustomer: '苏州工业园',
+      customerType: 'NA代管',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: 'Q1',
+      opportunityCount: 0,
+      pipelineAmount: 0,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
   ];
 
   it('should_return_all_when_input_empty', () => {
@@ -228,7 +269,11 @@ describe('filterT2000Stats', () => {
   });
 
   it('should_match_single_token_fuzzy', () => {
-    expect(filterT2000Stats(sample, '南京').map((s) => s.customer).sort()).toEqual(['南京地铁', '南京证券']);
+    expect(
+      filterT2000Stats(sample, '南京')
+        .map((s) => s.customer)
+        .sort(),
+    ).toEqual(['南京地铁', '南京证券']);
   });
 
   it('should_support_multiple_tokens', () => {
@@ -239,9 +284,57 @@ describe('filterT2000Stats', () => {
 
 describe('filterT2000ByType', () => {
   const sample = [
-    { customer: 'A', normalizedCustomer: 'A', customerType: 'NA-I', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: '', opportunityCount: 0, pipelineAmount: 0, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
-    { customer: 'B', normalizedCustomer: 'B', customerType: 'NA-II', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: '', opportunityCount: 0, pipelineAmount: 0, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
-    { customer: 'C', normalizedCustomer: 'C', customerType: '', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: '', opportunityCount: 0, pipelineAmount: 0, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
+    {
+      customer: 'A',
+      normalizedCustomer: 'A',
+      customerType: 'NA-I',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: '',
+      opportunityCount: 0,
+      pipelineAmount: 0,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
+    {
+      customer: 'B',
+      normalizedCustomer: 'B',
+      customerType: 'NA-II',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: '',
+      opportunityCount: 0,
+      pipelineAmount: 0,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
+    {
+      customer: 'C',
+      normalizedCustomer: 'C',
+      customerType: '',
+      quadrant: '',
+      customerOwner: '',
+      presales: '',
+      industryLevel1: '',
+      sourceSheet: '',
+      opportunityCount: 0,
+      pipelineAmount: 0,
+      forecastAmount: 0,
+      performanceCount: 0,
+      orderAmount: 0,
+      grossProfit: 0,
+      stageBreakdown: [],
+    },
   ];
 
   it('should_return_all_when_type_is_all', () => {
@@ -258,8 +351,40 @@ describe('filterT2000ByType', () => {
 describe('summarizeT2000Stats', () => {
   it('should_sum_all_metrics', () => {
     const summary = summarizeT2000Stats([
-      { customer: 'A', normalizedCustomer: 'A', customerType: '', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: '', opportunityCount: 3, pipelineAmount: 100, forecastAmount: 60, performanceCount: 1, orderAmount: 50, grossProfit: 20, stageBreakdown: [] },
-      { customer: 'B', normalizedCustomer: 'B', customerType: '', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: '', opportunityCount: 5, pipelineAmount: 200, forecastAmount: 100, performanceCount: 2, orderAmount: 80, grossProfit: 40, stageBreakdown: [] },
+      {
+        customer: 'A',
+        normalizedCustomer: 'A',
+        customerType: '',
+        quadrant: '',
+        customerOwner: '',
+        presales: '',
+        industryLevel1: '',
+        sourceSheet: '',
+        opportunityCount: 3,
+        pipelineAmount: 100,
+        forecastAmount: 60,
+        performanceCount: 1,
+        orderAmount: 50,
+        grossProfit: 20,
+        stageBreakdown: [],
+      },
+      {
+        customer: 'B',
+        normalizedCustomer: 'B',
+        customerType: '',
+        quadrant: '',
+        customerOwner: '',
+        presales: '',
+        industryLevel1: '',
+        sourceSheet: '',
+        opportunityCount: 5,
+        pipelineAmount: 200,
+        forecastAmount: 100,
+        performanceCount: 2,
+        orderAmount: 80,
+        grossProfit: 40,
+        stageBreakdown: [],
+      },
     ]);
     expect(summary).toEqual({
       customerCount: 2,
@@ -288,11 +413,151 @@ describe('summarizeT2000Stats', () => {
 describe('exportT2000StatsCsv', () => {
   it('should_include_header_and_escape_special_characters', () => {
     const csv = exportT2000StatsCsv([
-      { customer: '南京证券', normalizedCustomer: '南京证券', customerType: 'NA-I', quadrant: '战略', customerOwner: '张三', presales: '李四', industryLevel1: '金融', sourceSheet: 'Q3', opportunityCount: 3, pipelineAmount: 100, forecastAmount: 60, performanceCount: 2, orderAmount: 50, grossProfit: 20, stageBreakdown: [] },
-      { customer: '有,逗号', normalizedCustomer: '有,逗号', customerType: '', quadrant: '', customerOwner: '', presales: '', industryLevel1: '', sourceSheet: 'Q3', opportunityCount: 0, pipelineAmount: 0, forecastAmount: 0, performanceCount: 0, orderAmount: 0, grossProfit: 0, stageBreakdown: [] },
+      {
+        customer: '南京证券',
+        normalizedCustomer: '南京证券',
+        customerType: 'NA-I',
+        quadrant: '战略',
+        customerOwner: '张三',
+        presales: '李四',
+        industryLevel1: '金融',
+        sourceSheet: 'Q3',
+        opportunityCount: 3,
+        pipelineAmount: 100,
+        forecastAmount: 60,
+        performanceCount: 2,
+        orderAmount: 50,
+        grossProfit: 20,
+        stageBreakdown: [],
+      },
+      {
+        customer: '有,逗号',
+        normalizedCustomer: '有,逗号',
+        customerType: '',
+        quadrant: '',
+        customerOwner: '',
+        presales: '',
+        industryLevel1: '',
+        sourceSheet: 'Q3',
+        opportunityCount: 0,
+        pipelineAmount: 0,
+        forecastAmount: 0,
+        performanceCount: 0,
+        orderAmount: 0,
+        grossProfit: 0,
+        stageBreakdown: [],
+      },
     ]);
     const lines = csv.split('\n');
     expect(lines[0]).toContain('客户,客户类型,象限');
     expect(lines[2]).toBe('"有,逗号",,,,,,Q3,0,0.00,0.00,0,0.00,0.00');
+  });
+});
+
+describe('T2000 pipeline mix and project stats', () => {
+  it('should_calculate_t2000_and_non_t2000_pipeline_share_by_na_customer_list', () => {
+    const data = makeData(
+      [
+        makePpl({ id: 'r1', customerName: '南京证券股份有限公司', opportunityName: 'A项目', amount: 100 }),
+        makePpl({ id: 'r2', customerName: '普通客户', opportunityName: 'B项目', amount: 300 }),
+      ],
+      [],
+      [makeNa({ customer: '南京证券' })],
+    );
+
+    const mix = buildT2000PipelineMix(data);
+
+    expect(mix.t2000PipelineAmount).toBe(100);
+    expect(mix.nonT2000PipelineAmount).toBe(300);
+    expect(mix.t2000Rate).toBe(0.25);
+    expect(mix.nonT2000Rate).toBe(0.75);
+  });
+
+  it('should_group_by_opportunity_project_name_and_support_scope_filter', () => {
+    const data = makeData(
+      [
+        makePpl({
+          id: 'r1',
+          customerName: '南京证券',
+          opportunityName: '重点项目',
+          owner: '张三',
+          stage: '立项',
+          amount: 100,
+          productLevel2: '云安全',
+          productLevel3: '主机安全',
+        }),
+        makePpl({
+          id: 'r2',
+          customerName: '普通客户',
+          opportunityName: '重点项目',
+          owner: '李四',
+          stage: '方案',
+          amount: 200,
+          raw: { 二级分类: '终端安全', 三级产品分类: '终端防病毒' },
+        }),
+        makePpl({ id: 'r3', customerName: '普通客户2', opportunityName: '普通项目', amount: 300 }),
+      ],
+      [],
+      [makeNa({ customer: '南京证券' })],
+    );
+
+    const allStats = buildOpportunityProjectStats(data);
+    const project = allStats.find((item) => item.projectName === '重点项目');
+    expect(project).toMatchObject({
+      t2000Status: '混合',
+      opportunityCount: 2,
+      pipelineAmount: 300,
+      t2000PipelineAmount: 100,
+      nonT2000PipelineAmount: 200,
+    });
+    expect(project?.owners.sort()).toEqual(['张三', '李四']);
+    expect(project?.productLevel2).toEqual(['云安全', '终端安全']);
+    expect(project?.productLevel3).toEqual(['终端防病毒', '主机安全']);
+
+    const nonT2000Stats = buildOpportunityProjectStats(data, '', '非T2000');
+    expect(nonT2000Stats.find((item) => item.projectName === '重点项目')).toMatchObject({
+      t2000Status: '非T2000',
+      pipelineAmount: 200,
+    });
+
+    expect(buildOpportunityProjectStats(data, '重点')).toHaveLength(1);
+  });
+
+  it('should_treat_all_ppl_as_non_t2000_when_na_list_is_empty', () => {
+    const data = makeData(
+      [makePpl({ id: 'r1', customerName: '南京证券', opportunityName: 'A项目', amount: 100 })],
+      [],
+      [],
+    );
+
+    const mix = buildT2000PipelineMix(data);
+    const stats = buildOpportunityProjectStats(data);
+
+    expect(mix.t2000PipelineAmount).toBe(0);
+    expect(mix.nonT2000PipelineAmount).toBe(100);
+    expect(stats[0]?.t2000Status).toBe('非T2000');
+  });
+
+  it('should_export_project_stats_csv', () => {
+    const csv = exportOpportunityProjectStatsCsv([
+      {
+        projectName: '项目,含逗号',
+        normalizedProjectName: '项目,含逗号',
+        t2000Status: 'T2000',
+        opportunityCount: 1,
+        pipelineAmount: 100,
+        t2000PipelineAmount: 100,
+        nonT2000PipelineAmount: 0,
+        customerNames: ['南京证券'],
+        productLevel2: ['云安全'],
+        productLevel3: ['主机安全'],
+        owners: ['张三'],
+        stages: ['立项'],
+      },
+    ]);
+
+    expect(csv.split('\n')[0]).toContain('客户,二级产品,三级产品,Pipeline所有人');
+    expect(csv).toContain('"项目,含逗号"');
+    expect(csv).toContain('云安全,主机安全');
   });
 });

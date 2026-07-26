@@ -23,6 +23,38 @@ describe('comparePresalesData', () => {
     expect(comparison.items.find((item) => item.key === 'profitAmount')?.delta).toBe(-20);
     expect(comparison.items.find((item) => item.key === 'orderAmount')?.delta).toBe(10);
   });
+
+  it('识别新增、移除以及金额、阶段、负责人和产品变化', () => {
+    const previous = buildData({ pipeline: 1000, profit: 120, order: 70 });
+    const current = buildData({ pipeline: 1200, profit: 100, order: 80 });
+    previous.ppl.push({
+      ...previous.ppl[0],
+      id: '3',
+      customerName: '客户C',
+      opportunityName: '移除项目',
+    });
+    current.ppl[0] = {
+      ...current.ppl[0],
+      owner: '李四',
+      stage: '方案评估',
+      productLevel2: '高级威胁治理',
+    };
+    current.ppl.push({
+      ...current.ppl[0],
+      id: '2',
+      customerName: '客户B',
+      opportunityName: '新增项目',
+    });
+
+    const comparison = comparePresalesData(current, previous);
+
+    expect(comparison.changeSummary).toEqual({ added: 1, removed: 1, changed: 1 });
+    expect(comparison.opportunityChanges[0]).toMatchObject({ type: 'added', opportunityName: '新增项目' });
+    expect(comparison.opportunityChanges[1].changedFields).toEqual(
+      expect.arrayContaining(['金额', '阶段', '负责人', '二级产品']),
+    );
+    expect(comparison.opportunityChanges[2]).toMatchObject({ type: 'removed', opportunityName: '移除项目' });
+  });
 });
 
 function buildData(input: { pipeline: number; profit: number; order: number }): DashboardData {

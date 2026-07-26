@@ -1,4 +1,5 @@
 import type { DashboardData, NaCustomer, PerformanceRecord, PPLRecord } from '../domain';
+import { normalizeBusinessKey, parseTokens } from './normalize';
 
 export interface T2000CustomerStats {
   /** 客户名（优先 NA Sheet 的名称） */
@@ -33,6 +34,33 @@ export interface T2000CustomerStats {
   stageBreakdown: Array<{ stage: string; amount: number; count: number }>;
 }
 
+export type T2000ProjectScope = '全部' | 'T2000' | '非T2000';
+
+export interface T2000PipelineMix {
+  t2000PipelineAmount: number;
+  nonT2000PipelineAmount: number;
+  totalPipelineAmount: number;
+  t2000Rate: number;
+  nonT2000Rate: number;
+  t2000OpportunityCount: number;
+  nonT2000OpportunityCount: number;
+}
+
+export interface OpportunityProjectStats {
+  projectName: string;
+  normalizedProjectName: string;
+  t2000Status: 'T2000' | '非T2000' | '混合';
+  opportunityCount: number;
+  pipelineAmount: number;
+  t2000PipelineAmount: number;
+  nonT2000PipelineAmount: number;
+  customerNames: string[];
+  productLevel2: string[];
+  productLevel3: string[];
+  owners: string[];
+  stages: string[];
+}
+
 /**
  * 基于 NA Sheet 中的"权威 T2000 名单"做客户统计。
  *
@@ -57,7 +85,8 @@ export function buildT2000CustomerStats(data: DashboardData): T2000CustomerStats
   const pplIndex = indexPplByCustomer(data.ppl);
   const perfIndex = indexPerformanceByCustomer(data.performance);
 
-  return naT2000List.map((na) => buildStatsFromNaCustomer(na, pplIndex, perfIndex))
+  return naT2000List
+    .map((na) => buildStatsFromNaCustomer(na, pplIndex, perfIndex))
     .sort((a, b) => b.pipelineAmount - a.pipelineAmount || b.orderAmount - a.orderAmount);
 }
 
@@ -69,7 +98,7 @@ function buildT2000CustomerStatsFallback(data: DashboardData): T2000CustomerStat
   const customerNames = new Map<string, string>(); // key -> display name
 
   data.ppl.forEach((row) => {
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     customerNames.set(key, row.customerName.trim() || key);
     const tag = String(row.t2000CustomerTag ?? '').toLowerCase();
@@ -77,7 +106,7 @@ function buildT2000CustomerStatsFallback(data: DashboardData): T2000CustomerStat
   });
   data.performance.forEach((row) => {
     if (!row.isT2000) return;
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     customerNames.set(key, row.customerName.trim() || key);
     t2000Keys.add(key);
@@ -86,22 +115,24 @@ function buildT2000CustomerStatsFallback(data: DashboardData): T2000CustomerStat
   const pplIndex = indexPplByCustomer(data.ppl);
   const perfIndex = indexPerformanceByCustomer(data.performance);
 
-  return Array.from(t2000Keys).map((key) => {
-    const fakeNa: NaCustomer = {
-      customer: customerNames.get(key) ?? key,
-      customerOwner: '',
-      presales: '',
-      customerType: '',
-      quadrant: '',
-      isT2000: true,
-      industryLevel1: '',
-      industryLevel2: '',
-      scaleTarget: '',
-      sourceSheet: '（PPL/业绩 推断）',
-      raw: {},
-    };
-    return buildStatsFromNaCustomer(fakeNa, pplIndex, perfIndex);
-  }).sort((a, b) => b.pipelineAmount - a.pipelineAmount || b.orderAmount - a.orderAmount);
+  return Array.from(t2000Keys)
+    .map((key) => {
+      const fakeNa: NaCustomer = {
+        customer: customerNames.get(key) ?? key,
+        customerOwner: '',
+        presales: '',
+        customerType: '',
+        quadrant: '',
+        isT2000: true,
+        industryLevel1: '',
+        industryLevel2: '',
+        scaleTarget: '',
+        sourceSheet: '（PPL/业绩 推断）',
+        raw: {},
+      };
+      return buildStatsFromNaCustomer(fakeNa, pplIndex, perfIndex);
+    })
+    .sort((a, b) => b.pipelineAmount - a.pipelineAmount || b.orderAmount - a.orderAmount);
 }
 
 function buildStatsFromNaCustomer(
@@ -109,7 +140,7 @@ function buildStatsFromNaCustomer(
   pplIndex: Map<string, PPLRecord[]>,
   perfIndex: Map<string, PerformanceRecord[]>,
 ): T2000CustomerStats {
-  const key = normalizeCustomer(na.customer);
+  const key = normalizeBusinessKey(na.customer);
   const pplRows = matchRows(pplIndex, key);
   const perfRows = matchRows(perfIndex, key);
 
@@ -145,11 +176,11 @@ function buildStatsFromNaCustomer(
  * 空输入 → 返回全部。
  */
 export function filterT2000Stats(stats: T2000CustomerStats[], input: string): T2000CustomerStats[] {
-  const tokens = parseInput(input);
+  const tokens = parseTokens(input);
   if (tokens.length === 0) return stats;
   const matched = new Set<string>();
   for (const token of tokens) {
-    const needle = normalizeCustomer(token);
+    const needle = normalizeBusinessKey(token);
     if (!needle) continue;
     stats.forEach((item) => {
       if (item.normalizedCustomer.includes(needle) || needle.includes(item.normalizedCustomer)) {
@@ -164,10 +195,7 @@ export function filterT2000Stats(stats: T2000CustomerStats[], input: string): T2
  * 按 NA Sheet 的客户类型过滤。
  * 空 / '全部' → 不过滤。
  */
-export function filterT2000ByType(
-  stats: T2000CustomerStats[],
-  type: string,
-): T2000CustomerStats[] {
+export function filterT2000ByType(stats: T2000CustomerStats[], type: string): T2000CustomerStats[] {
   if (!type || type === '全部') return stats;
   return stats.filter((item) => item.customerType === type);
 }
@@ -218,8 +246,193 @@ export function exportT2000StatsCsv(stats: T2000CustomerStats[]): string {
   return [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
 
+export function buildT2000PipelineMix(
+  data: DashboardData,
+  projectInput = '',
+  scope: T2000ProjectScope = '全部',
+): T2000PipelineMix {
+  const rows = filterProjectRows(classifyPplRowsByT2000(data), projectInput, scope);
+  const t2000Rows = rows.filter((row) => row.isT2000);
+  const nonT2000Rows = rows.filter((row) => !row.isT2000);
+  const t2000PipelineAmount = sumPplAmount(t2000Rows.map((row) => row.record));
+  const nonT2000PipelineAmount = sumPplAmount(nonT2000Rows.map((row) => row.record));
+  const totalPipelineAmount = t2000PipelineAmount + nonT2000PipelineAmount;
+  return {
+    t2000PipelineAmount,
+    nonT2000PipelineAmount,
+    totalPipelineAmount,
+    t2000Rate: totalPipelineAmount > 0 ? t2000PipelineAmount / totalPipelineAmount : 0,
+    nonT2000Rate: totalPipelineAmount > 0 ? nonT2000PipelineAmount / totalPipelineAmount : 0,
+    t2000OpportunityCount: t2000Rows.length,
+    nonT2000OpportunityCount: nonT2000Rows.length,
+  };
+}
+
+export function buildOpportunityProjectStats(
+  data: DashboardData,
+  projectInput = '',
+  scope: T2000ProjectScope = '全部',
+): OpportunityProjectStats[] {
+  const rows = filterProjectRows(classifyPplRowsByT2000(data), projectInput, scope);
+  const grouped = new Map<
+    string,
+    {
+      projectName: string;
+      normalizedProjectName: string;
+      opportunityCount: number;
+      pipelineAmount: number;
+      t2000PipelineAmount: number;
+      nonT2000PipelineAmount: number;
+      customerNames: Set<string>;
+      productLevel2: Set<string>;
+      productLevel3: Set<string>;
+      owners: Set<string>;
+      stages: Set<string>;
+    }
+  >();
+
+  rows.forEach(({ record, isT2000 }) => {
+    const projectName = normalizeProjectName(record.opportunityName);
+    const key = normalizeBusinessKey(projectName);
+    const current = grouped.get(key) ?? {
+      projectName,
+      normalizedProjectName: key,
+      opportunityCount: 0,
+      pipelineAmount: 0,
+      t2000PipelineAmount: 0,
+      nonT2000PipelineAmount: 0,
+      customerNames: new Set<string>(),
+      productLevel2: new Set<string>(),
+      productLevel3: new Set<string>(),
+      owners: new Set<string>(),
+      stages: new Set<string>(),
+    };
+    const amount = toNumber(record.amount);
+    current.opportunityCount += 1;
+    current.pipelineAmount += amount;
+    if (isT2000) current.t2000PipelineAmount += amount;
+    else current.nonT2000PipelineAmount += amount;
+    if (record.customerName.trim()) current.customerNames.add(record.customerName.trim());
+    const productLevel2 = readPplProductLevel(record, 2);
+    const productLevel3 = readPplProductLevel(record, 3);
+    if (productLevel2) current.productLevel2.add(productLevel2);
+    if (productLevel3) current.productLevel3.add(productLevel3);
+    if (record.owner.trim()) current.owners.add(record.owner.trim());
+    if (record.stage.trim()) current.stages.add(record.stage.trim());
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .map((item) => ({
+      ...item,
+      t2000Status: projectT2000Status(item.t2000PipelineAmount, item.nonT2000PipelineAmount),
+      customerNames: [...item.customerNames].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      productLevel2: [...item.productLevel2].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      productLevel3: [...item.productLevel3].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      owners: [...item.owners].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      stages: [...item.stages].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    }))
+    .sort(
+      (a, b) => b.pipelineAmount - a.pipelineAmount || a.projectName.localeCompare(b.projectName, 'zh-CN'),
+    );
+}
+
+export function exportOpportunityProjectStatsCsv(stats: OpportunityProjectStats[]): string {
+  const header = [
+    '商机项目名称',
+    'T2000状态',
+    '商机数',
+    'Pipeline金额(万元)',
+    'T2000 Pipeline金额(万元)',
+    '非T2000 Pipeline金额(万元)',
+    '客户',
+    '二级产品',
+    '三级产品',
+    'Pipeline所有人',
+    '阶段',
+  ];
+  const rows = stats.map((item) => [
+    item.projectName,
+    item.t2000Status,
+    item.opportunityCount.toString(),
+    item.pipelineAmount.toFixed(2),
+    item.t2000PipelineAmount.toFixed(2),
+    item.nonT2000PipelineAmount.toFixed(2),
+    item.customerNames.join(' / '),
+    item.productLevel2.join(' / '),
+    item.productLevel3.join(' / '),
+    item.owners.join(' / '),
+    item.stages.join(' / '),
+  ]);
+  return [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+}
+
 function isT2000NaCustomer(na: NaCustomer): boolean {
   return na.isT2000 || na.scaleTarget.length > 0;
+}
+
+function projectT2000Status(
+  t2000PipelineAmount: number,
+  nonT2000PipelineAmount: number,
+): OpportunityProjectStats['t2000Status'] {
+  if (t2000PipelineAmount > 0 && nonT2000PipelineAmount > 0) return '混合';
+  if (t2000PipelineAmount > 0) return 'T2000';
+  return '非T2000';
+}
+
+function classifyPplRowsByT2000(data: DashboardData): Array<{ record: PPLRecord; isT2000: boolean }> {
+  const t2000Customers = (data.naCustomers ?? []).filter(isT2000NaCustomer);
+  return data.ppl.map((record) => ({
+    record,
+    isT2000: isCustomerInT2000List(record.customerName, t2000Customers),
+  }));
+}
+
+function isCustomerInT2000List(customerName: string, t2000Customers: NaCustomer[]) {
+  const key = normalizeBusinessKey(customerName);
+  if (!key) return false;
+  return t2000Customers.some((customer) => {
+    const t2000Key = normalizeBusinessKey(customer.customer);
+    return Boolean(t2000Key && (key === t2000Key || key.includes(t2000Key) || t2000Key.includes(key)));
+  });
+}
+
+function filterProjectRows(
+  rows: Array<{ record: PPLRecord; isT2000: boolean }>,
+  projectInput: string,
+  scope: T2000ProjectScope,
+) {
+  const tokens = parseTokens(projectInput).map(normalizeBusinessKey).filter(Boolean);
+  return rows.filter((row) => {
+    if (scope === 'T2000' && !row.isT2000) return false;
+    if (scope === '非T2000' && row.isT2000) return false;
+    if (tokens.length === 0) return true;
+    const projectKey = normalizeBusinessKey(normalizeProjectName(row.record.opportunityName));
+    return tokens.some((token) => projectKey.includes(token) || token.includes(projectKey));
+  });
+}
+
+function normalizeProjectName(name: string) {
+  const trimmed = String(name ?? '').trim();
+  return trimmed || '未填写商机项目';
+}
+
+function readPplProductLevel(record: PPLRecord, level: 2 | 3) {
+  const direct = level === 2 ? record.productLevel2 : record.productLevel3;
+  if (direct?.trim()) return direct.trim();
+  const aliases =
+    level === 2
+      ? ['二级产品分类', '二级分类', '产品二级分类', '二级产品线']
+      : ['三级产品分类', '三级分类', '产品三级分类', '三类产品分类', '三层产品分类'];
+  for (const alias of aliases) {
+    const value = String(record.raw[alias] ?? '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function sumPplAmount(rows: PPLRecord[]) {
+  return rows.reduce((sum, row) => sum + toNumber(row.amount), 0);
 }
 
 function buildStageBreakdown(rows: PPLRecord[]): Array<{ stage: string; amount: number; count: number }> {
@@ -242,7 +455,7 @@ function normalizeStage(stage: string): string {
 function indexPplByCustomer(rows: PPLRecord[]): Map<string, PPLRecord[]> {
   const map = new Map<string, PPLRecord[]>();
   rows.forEach((row) => {
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     const list = map.get(key) ?? [];
     list.push(row);
@@ -254,7 +467,7 @@ function indexPplByCustomer(rows: PPLRecord[]): Map<string, PPLRecord[]> {
 function indexPerformanceByCustomer(rows: PerformanceRecord[]): Map<string, PerformanceRecord[]> {
   const map = new Map<string, PerformanceRecord[]>();
   rows.forEach((row) => {
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     const list = map.get(key) ?? [];
     list.push(row);
@@ -280,14 +493,6 @@ function matchRows<T extends { customerName: string }>(index: Map<string, T[]>, 
   return partial;
 }
 
-function parseInput(input: string): string[] {
-  if (!input) return [];
-  return input
-    .split(/[\s,，；;、\n\r]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function escapeCsv(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
   return value;
@@ -300,9 +505,4 @@ function toNumber(value: unknown): number {
     return Number.isFinite(num) ? num : 0;
   }
   return 0;
-}
-
-function normalizeCustomer(value: string | undefined | null): string {
-  if (!value) return '';
-  return String(value).replace(/\s+/g, '').trim();
 }

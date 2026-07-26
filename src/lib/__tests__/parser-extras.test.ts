@@ -56,6 +56,8 @@ describe('parseDashboardFile', () => {
         商机项目名称: 'AI XDR 项目',
         最终客户所属一级行业: '金融',
         产品名称: 'AI XDR',
+        二级产品分类: '联动防御系统',
+        三级产品分类: 'AI XDR 平台',
         T2000客户标签: 'T2000',
         总价: 1200000,
         客户采购阶段: '项目立项，预算到位',
@@ -76,6 +78,8 @@ describe('parseDashboardFile', () => {
     expect(parsed.ppl[0].owner).toBe('张三');
     expect(parsed.ppl[0].amount).toBe(120);
     expect(parsed.ppl[0].t2000CustomerTag).toBe('T2000');
+    expect(parsed.ppl[0].productLevel2).toBe('联动防御系统');
+    expect(parsed.ppl[0].productLevel3).toBe('AI XDR 平台');
     expect(parsed.ppl[0].forecastType).toBe('Commit');
   });
 
@@ -213,14 +217,26 @@ describe('parseDashboardFile', () => {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet([
       {
-        Pipeline所有人: '栾伽', 客户名称: 'A', 商机项目名称: 'A', 产品名称: 'DS',
-        总价: 100, 客户采购阶段: '5.招标采购',
-        赢单几率: '0.5', 预计落单时间: '2027-09-01', 季度: "Q4'2027",
+        Pipeline所有人: '栾伽',
+        客户名称: 'A',
+        商机项目名称: 'A',
+        产品名称: 'DS',
+        总价: 100,
+        客户采购阶段: '5.招标采购',
+        赢单几率: '0.5',
+        预计落单时间: '2027-09-01',
+        季度: "Q4'2027",
       },
       {
-        Pipeline所有人: '栾伽', 客户名称: 'B', 商机项目名称: 'B', 产品名称: 'DS',
-        总价: 100, 客户采购阶段: '1.提出需求',
-        赢单几率: '0.5', 预计落单时间: '2027-09-01', 季度: "Q4'2027",
+        Pipeline所有人: '栾伽',
+        客户名称: 'B',
+        商机项目名称: 'B',
+        产品名称: 'DS',
+        总价: 100,
+        客户采购阶段: '1.提出需求',
+        赢单几率: '0.5',
+        预计落单时间: '2027-09-01',
+        季度: "Q4'2027",
       },
     ]);
     XLSX.utils.book_append_sheet(workbook, sheet, '售前商机明细表-向娜');
@@ -490,19 +506,19 @@ describe('parseDashboardFile (NA Sheet quarter selection)', () => {
   function buildNaRow(customer: string, t2000: string, scale: string, type: string) {
     return {
       '客户/合作伙伴名称': customer,
-      '客户所有人': '王五',
-      '售前': '李四',
-      '客户类型': type,
-      '客户象限名称': '战略客户',
-      'T2000客户标签': t2000,
-      '最终客户所属一级行业': '金融',
-      '最终客户所属二级行业': '证券',
-      '详细地址': '-',
-      '所属公海': '-',
-      '客户业务类型': '-',
+      客户所有人: '王五',
+      售前: '李四',
+      客户类型: type,
+      客户象限名称: '战略客户',
+      T2000客户标签: t2000,
+      最终客户所属一级行业: '金融',
+      最终客户所属二级行业: '证券',
+      详细地址: '-',
+      所属公海: '-',
+      客户业务类型: '-',
       '最终客户所属二级行业 (1)': '证券',
       '是否为规模化产出目标（20%及以上）': scale ? '是' : '否',
-      '规模化产出目标': scale,
+      规模化产出目标: scale,
     };
   }
 
@@ -544,7 +560,10 @@ describe('parseDashboardFile (NA Sheet quarter selection)', () => {
     const parsed = await buildFileAndParse([
       { name: `${y}年Q1-NA客户`, rows: [buildNaRow('Q1客户A', 'T2000', '', 'NA-I')] },
       { name: `${y}年Q2-NA客户`, rows: [buildNaRow('Q2客户A', 'T2000', '', 'NA-I')] },
-      { name: `${y}年Q3-NA客户`, rows: [buildNaRow('Q3客户A', 'T2000', '', 'NA-I'), buildNaRow('Q3客户B', '', '20%', 'NA-II')] },
+      {
+        name: `${y}年Q3-NA客户`,
+        rows: [buildNaRow('Q3客户A', 'T2000', '', 'NA-I'), buildNaRow('Q3客户B', '', '20%', 'NA-II')],
+      },
       { name: `${y}年Q4-NA客户`, rows: [buildNaRow('Q4客户A', 'T2000', '', 'NA-I')] },
     ]);
 

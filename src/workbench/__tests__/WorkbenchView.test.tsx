@@ -11,12 +11,13 @@ const mocks = vi.hoisted(() => ({
   saveWorkEvent: vi.fn(),
   parseDashboardFile: vi.fn(),
   captureDashboardImport: vi.fn(),
+  createTemporaryCustomer: vi.fn(),
 }));
 
 vi.mock('../../lib/parser', () => ({ parseDashboardFile: mocks.parseDashboardFile }));
 vi.mock('../db', () => ({
   captureDashboardImport: mocks.captureDashboardImport,
-  createTemporaryCustomer: vi.fn(),
+  createTemporaryCustomer: mocks.createTemporaryCustomer,
   deleteWorkEvent: mocks.deleteWorkEvent,
   exportWorkbenchBackup: vi.fn(),
   initializeWorkbench: mocks.initializeWorkbench,
@@ -94,6 +95,15 @@ describe('WorkbenchView', () => {
     mocks.loadWorkbenchData.mockResolvedValue(emptyData);
     mocks.deleteWorkEvent.mockResolvedValue(undefined);
     mocks.saveWorkEvent.mockResolvedValue(undefined);
+    mocks.createTemporaryCustomer.mockResolvedValue({
+      id: 'temporary-customer',
+      canonicalName: '临时客户',
+      sourceKey: 'manual:temporary',
+      aliases: ['临时客户'],
+      matchStatus: 'pending',
+      createdAt: '',
+      updatedAt: '',
+    });
   });
 
   it('can drag a calendar event to another date and keep its time', async () => {
@@ -323,7 +333,48 @@ describe('WorkbenchView', () => {
     );
   });
 
-  it('点击日期后可直接填写具体内容，并用首行创建全天计划草稿', async () => {
+  it('临时填写的客户名称唯一模糊命中导入客户时，保存为已导入客户用于统计', async () => {
+    mocks.loadWorkbenchData.mockResolvedValue({
+      ...emptyData,
+      customers: [
+        {
+          id: 'customer-zj',
+          canonicalName: '紫金山实验室',
+          sourceKey: 'customer:zj',
+          aliases: ['紫金山'],
+          matchStatus: 'matched',
+          createdAt: '2026-07-20T00:00:00.000Z',
+          updatedAt: '2026-07-20T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<WorkbenchView />);
+    await screen.findByText('本地持久化已启用');
+
+    fireEvent.click(screen.getByRole('button', { name: '完整录入工作' }));
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '紫金山客户沟通' } });
+
+    const customerInput = screen.getByPlaceholderText('输入客户简称或全称搜索');
+    fireEvent.focus(customerInput);
+    fireEvent.change(customerInput, { target: { value: '临时' } });
+    fireEvent.click(await screen.findByRole('button', { name: '＋ 临时录入新客户' }));
+    fireEvent.change(screen.getByPlaceholderText('将标记为待匹配'), { target: { value: '紫金山' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存记录' }));
+
+    await waitFor(() =>
+      expect(mocks.saveWorkEvent).toHaveBeenCalledWith({
+        event: expect.objectContaining({
+          customerId: 'customer-zj',
+          customerNameSnapshot: '紫金山实验室',
+        }),
+        participants: [],
+      }),
+    );
+    expect(mocks.createTemporaryCustomer).not.toHaveBeenCalled();
+  });
+
+  it('单击日期只选中，双击日期后可直接填写具体内容并创建全天计划草稿', async () => {
     const today = dateText();
     mocks.loadWorkbenchData.mockResolvedValueOnce(emptyData).mockResolvedValueOnce({
       ...emptyData,
@@ -332,7 +383,11 @@ describe('WorkbenchView', () => {
     render(<WorkbenchView />);
     await screen.findByText('本地持久化已启用');
 
-    fireEvent.click(screen.getByRole('button', { name: `选择 ${today} 并新增工作` }));
+    const dateButton = screen.getByRole('button', { name: `选择 ${today}` });
+    fireEvent.click(dateButton);
+    expect(screen.queryByPlaceholderText('直接填写具体工作内容，首行作为标题')).not.toBeInTheDocument();
+
+    fireEvent.doubleClick(dateButton);
     const input = screen.getByPlaceholderText('直接填写具体工作内容，首行作为标题');
     await waitFor(() => expect(input).toHaveFocus());
     fireEvent.change(input, { target: { value: '准备客户交流材料\n确认演示范围和时间' } });
@@ -361,7 +416,7 @@ describe('WorkbenchView', () => {
     render(<WorkbenchView />);
     await screen.findByText('本地持久化已启用');
 
-    fireEvent.click(screen.getByRole('button', { name: `选择 ${dateText()} 并新增工作` }));
+    fireEvent.doubleClick(screen.getByRole('button', { name: `选择 ${dateText()}` }));
     const input = screen.getByPlaceholderText('直接填写具体工作内容，首行作为标题');
     fireEvent.keyDown(input, { key: 'Escape' });
 
@@ -424,14 +479,14 @@ describe('WorkbenchView', () => {
     render(<WorkbenchView />);
     await screen.findByText('本地持久化已启用');
 
-    fireEvent.click(screen.getByRole('button', { name: '标记“跟进客户反馈”为已完成' }));
+    fireEvent.click(screen.getByRole('button', { name: '勾选“跟进客户反馈”为已完成' }));
     await waitFor(() =>
       expect(mocks.saveWorkEvent).toHaveBeenLastCalledWith({
         event: expect.objectContaining({ id: 'event-toggle', status: 'completed' }),
         participants: [],
       }),
     );
-    const restoreButton = await screen.findByRole('button', { name: '恢复“跟进客户反馈”为计划中' });
+    const restoreButton = await screen.findByRole('button', { name: '取消勾选“跟进客户反馈”' });
     expect(restoreButton.closest('.work-event-pill')).toHaveClass('completed');
 
     fireEvent.click(restoreButton);
@@ -441,6 +496,69 @@ describe('WorkbenchView', () => {
         participants: [],
       }),
     );
+  });
+
+  it('完成按钮不会触发拖拽，已完成事项可稳定恢复', async () => {
+    const today = dateText();
+    const completed = { ...quickEvent('event-restore', '恢复客户沟通', today), status: 'completed' as const };
+    const planned = { ...completed, status: 'planned' as const };
+    mocks.loadWorkbenchData
+      .mockResolvedValueOnce({ ...emptyData, events: [completed] })
+      .mockResolvedValueOnce({ ...emptyData, events: [planned] });
+    render(<WorkbenchView />);
+    await screen.findByText('本地持久化已启用');
+
+    const restoreButton = screen.getByRole('button', { name: '取消勾选“恢复客户沟通”' });
+    expect(restoreButton).toHaveAttribute('draggable', 'false');
+    expect(restoreButton).toHaveAttribute('title', '点击恢复为未完成');
+
+    const dataTransfer = {
+      dropEffect: '',
+      effectAllowed: '',
+      setData: vi.fn(),
+      getData: vi.fn(),
+    };
+    fireEvent.dragStart(restoreButton, { dataTransfer });
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+
+    fireEvent.click(restoreButton);
+    await waitFor(() =>
+      expect(mocks.saveWorkEvent).toHaveBeenCalledWith({
+        event: expect.objectContaining({ id: 'event-restore', status: 'planned' }),
+        participants: [],
+      }),
+    );
+  });
+
+  it('保存完整录入时校验结束时间必须晚于开始时间', async () => {
+    mocks.loadWorkbenchData.mockResolvedValue({
+      ...emptyData,
+      people: [
+        {
+          id: 'person-1',
+          name: '陈飞',
+          normalizedName: '陈飞',
+          status: 'active',
+          sortOrder: 1,
+          createdAt: '2026-07-20T00:00:00.000Z',
+          updatedAt: '2026-07-20T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<WorkbenchView />);
+    await screen.findByText('本地持久化已启用');
+
+    fireEvent.click(screen.getByRole('button', { name: '新增工作' }));
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '时间校验工作' } });
+    const allDayCheckbox = screen.getByLabelText('全天或暂未安排具体时间');
+    fireEvent.change(allDayCheckbox, { target: { checked: false } });
+    expect(allDayCheckbox).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '10:00' } });
+    fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '09:00' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存记录' }));
+
+    expect(await screen.findByText('结束时间必须晚于开始时间。')).toBeInTheDocument();
+    expect(mocks.saveWorkEvent).not.toHaveBeenCalled();
   });
 
   it('月历日期格保留全部事项，由格内滚动承载溢出内容', async () => {
@@ -498,6 +616,123 @@ describe('WorkbenchView', () => {
 
     await waitFor(() => expect(screen.getAllByText('江苏客户交流').length).toBeGreaterThan(0));
     expect(screen.queryByText('浙江客户交流')).not.toBeInTheDocument();
+  });
+
+  it('工作量统计按商机客户归类，并支持下钻到其他、未关联及工作详情', async () => {
+    const completedEvent = {
+      ...quickEvent('event-customer', '客户方案交流', '2026-07-21'),
+      status: 'completed' as const,
+      entryMode: 'detailed' as const,
+      allDay: false,
+      startAt: '2026-07-21T09:00:00',
+      endAt: '2026-07-21T10:00:00',
+      workTypeId: 'type-communication',
+      ownerId: 'person-1',
+      customerNameSnapshot: '紫金山',
+      opportunityNameSnapshot: '',
+    };
+    const otherEvent = {
+      ...completedEvent,
+      id: 'event-other',
+      title: '新客户沟通',
+      customerId: 'temporary-customer',
+      customerNameSnapshot: '新客户',
+    };
+    const unlinkedEvent = {
+      ...completedEvent,
+      id: 'event-unlinked',
+      title: '内部准备',
+      customerNameSnapshot: '',
+    };
+    mocks.loadWorkbenchData.mockResolvedValue({
+      ...emptyData,
+      people: [
+        {
+          id: 'person-1',
+          name: '陈飞',
+          normalizedName: '陈飞',
+          status: 'active',
+          sortOrder: 1,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      workTypes: [
+        {
+          id: 'type-communication',
+          code: 'customer_communication',
+          name: '客户交流',
+          color: '#2563eb',
+          status: 'active',
+          sortOrder: 1,
+          isSystem: true,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      customers: [
+        {
+          id: 'customer-zj',
+          canonicalName: '紫金山实验室',
+          sourceKey: 'customer:zj',
+          aliases: ['紫金山'],
+          matchStatus: 'matched',
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          id: 'temporary-customer',
+          canonicalName: '新客户',
+          sourceKey: 'manual:new',
+          aliases: ['新客户'],
+          matchStatus: 'pending',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      opportunities: [
+        {
+          id: 'opportunity-zj',
+          customerId: 'customer-zj',
+          canonicalName: '实验室建设项目',
+          sourceKey: 'opportunity:zj',
+          aliases: [],
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      events: [completedEvent, otherEvent, unlinkedEvent],
+      participants: [
+        {
+          id: 'event-customer:person-1',
+          eventId: 'event-customer',
+          personId: 'person-1',
+          actualMinutes: 60,
+        },
+      ],
+    });
+    render(<WorkbenchView />);
+    await screen.findByText('本地持久化已启用');
+
+    fireEvent.click(screen.getByRole('button', { name: '工作量统计' }));
+    expect(await screen.findByText('覆盖商机客户')).toBeInTheDocument();
+    expect(screen.getByText('其他客户 1 个 · 未关联工作 1 条')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看紫金山实验室工作明细' }));
+    expect(screen.getByRole('complementary', { name: '紫金山实验室工作明细' })).toBeInTheDocument();
+    expect(screen.getByText('名称唯一模糊命中')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开工作详情：客户方案交流' }));
+    expect(screen.getByRole('complementary', { name: '编辑工作' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '关闭' })[0]);
+    expect(screen.getByRole('complementary', { name: '紫金山实验室工作明细' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭客户工作明细' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '查看其他工作明细' }));
+    expect(screen.getByText('未命中商机客户')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭客户工作明细' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '查看未关联客户工作明细' }));
+    expect(screen.getByText('工作未填写客户')).toBeInTheDocument();
   });
 
   it('工作台导入使用独立来源并显示增量结果', async () => {

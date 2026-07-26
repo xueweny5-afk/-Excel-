@@ -13,8 +13,10 @@ interface ChartCardProps {
 export function ChartCard({ title, subtitle, option, onClick, height = 300 }: ChartCardProps) {
   const events = onClick
     ? {
-        click: (params: { name?: unknown; value?: unknown[] }) =>
-          onClick(String(params.name ?? params.value?.[3] ?? '')),
+        click: (params: unknown) => {
+          const p = params as { name?: unknown; value?: unknown[] };
+          onClick(String(p.name ?? p.value?.[3] ?? ''));
+        },
       }
     : undefined;
 

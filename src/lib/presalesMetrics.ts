@@ -42,6 +42,7 @@ export interface QualityRiskItem {
 }
 
 export interface PresalesAnalysis {
+  rawData: DashboardData;
   kpis: {
     pipelineAmount: number;
     pipelineRate: number;
@@ -158,11 +159,14 @@ export function analyzePresalesDashboard(data: DashboardData): PresalesAnalysis 
     performanceRows.length > 0
       ? `已接入业绩明细 ${performanceRows.length.toLocaleString('zh-CN')} 行，毛利、已下单和产品线订单按业绩明细统计。`
       : '当前未识别到业绩明细 Sheet，毛利、已下单和产品线订单暂为 0。',
-    'NA 客户 Sheet 尚未结构化接入。',
+    (data.naCustomers?.length ?? 0) > 0
+      ? `已接入 NA 客户 ${data.naCustomers?.length.toLocaleString('zh-CN')} 行，T2000 相关分析按 NA/T2000 客户表识别。`
+      : '当前未识别到 NA/T2000 客户表，T2000 相关分析会全部归为非 T2000。',
     '本周新增字段尚未接入，周报中的本周新增暂按 0 展示。',
   ];
 
   return {
+    rawData: data,
     kpis: {
       pipelineAmount,
       pipelineRate: rate(pipelineAmount, TARGETS.pipeline),

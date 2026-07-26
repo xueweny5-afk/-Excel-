@@ -21,8 +21,10 @@ import { SimpleRecords } from './components/tables/SimpleRecords';
 import { KeyCustomerView } from './components/keyCustomers/KeyCustomerView';
 import { PresalesDashboardView } from './components/presales/PresalesDashboardView';
 import { WorkbenchView } from './workbench/WorkbenchView';
+import { PerformanceStatsView } from './performanceStats/PerformanceStatsView';
 import { captureDashboardImport } from './workbench/db';
 import type { ModuleKey } from './stores/dataStore';
+import { loadPresalesHistory, savePresalesVersion } from './lib/presalesVersionHistory';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = {
   ppl: [],
@@ -47,6 +49,7 @@ export default function App() {
   const salesData = useDataStore((s) => s.salesData);
   const presalesData = useDataStore((s) => s.presalesData);
   const previousPresalesData = useDataStore((s) => s.previousPresalesData);
+  const presalesVersions = useDataStore((s) => s.presalesVersions);
   const loading = useDataStore((s) => s.loading);
   const error = useDataStore((s) => s.error);
   const activeModule = useDataStore((s) => s.activeModule);
@@ -55,6 +58,7 @@ export default function App() {
   const isDraggingFile = useDataStore((s) => s.isDraggingFile);
   const setSalesData = useDataStore((s) => s.setSalesData);
   const setPresalesData = useDataStore((s) => s.setPresalesData);
+  const setPresalesHistory = useDataStore((s) => s.setPresalesHistory);
   const setLoading = useDataStore((s) => s.setLoading);
   const setError = useDataStore((s) => s.setError);
   const setDragging = useDataStore((s) => s.setDragging);
@@ -65,6 +69,7 @@ export default function App() {
   const dragHandlers = useFileDrop();
   const isPresales = activeModule === 'presales';
   const isWorkbench = activeModule === 'workbench';
+  const isPerformanceStats = activeModule === 'performanceStats';
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -74,7 +79,13 @@ export default function App() {
       try {
         const parsed = await parseDashboardFile(file);
         if (activeModule === 'presales') {
-          setPresalesData(parsed);
+          try {
+            const history = await savePresalesVersion(parsed);
+            setPresalesHistory(history.current ?? parsed, history.previous, history.versions);
+          } catch (historyError) {
+            setPresalesData(parsed);
+            console.warn('[PresalesHistory]', historyError);
+          }
         } else {
           setSalesData(parsed);
         }
@@ -92,8 +103,22 @@ export default function App() {
         setLoading(false);
       }
     },
-    [activeModule, setPresalesData, setSalesData, setDragging, setError, setLoading],
+    [activeModule, setPresalesData, setPresalesHistory, setSalesData, setDragging, setError, setLoading],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadPresalesHistory()
+      .then((history) => {
+        if (!cancelled && history.current) {
+          setPresalesHistory(history.current, history.previous, history.versions);
+        }
+      })
+      .catch((historyError) => console.warn('[PresalesHistory]', historyError));
+    return () => {
+      cancelled = true;
+    };
+  }, [setPresalesHistory]);
 
   useEffect(() => {
     function onFileDrop(event: Event) {
@@ -109,16 +134,17 @@ export default function App() {
   return (
     <main
       className={`app-shell ${isDraggingFile ? 'dragging-file' : ''}`}
-      onDragEnter={isWorkbench ? undefined : dragHandlers.handleDragOver}
-      onDragOver={isWorkbench ? undefined : dragHandlers.handleDragOver}
-      onDragLeave={isWorkbench ? undefined : dragHandlers.handleDragLeave}
-      onDrop={isWorkbench ? undefined : dragHandlers.handleDrop}
+      onDragEnter={isWorkbench || isPerformanceStats ? undefined : dragHandlers.handleDragOver}
+      onDragOver={isWorkbench || isPerformanceStats ? undefined : dragHandlers.handleDragOver}
+      onDragLeave={isWorkbench || isPerformanceStats ? undefined : dragHandlers.handleDragLeave}
+      onDrop={isWorkbench || isPerformanceStats ? undefined : dragHandlers.handleDrop}
     >
       <ModuleNav
         active={activeModule}
         onSales={() => setActiveModule('sales')}
         onPresales={() => setActiveModule('presales')}
         onWorkbench={() => setActiveModule('workbench')}
+        onPerformanceStats={() => setActiveModule('performanceStats')}
       />
 
       {activeModule === 'sales' && (
@@ -130,17 +156,22 @@ export default function App() {
         />
       )}
 
-      {!isWorkbench && loading && (
+      {!isWorkbench && !isPerformanceStats && loading && (
         <StatusCard title="正在分析 Excel..." description="正在识别 Sheet、清洗字段并生成分析结果。" />
       )}
-      {!isWorkbench && error && <StatusCard tone="danger" title="文件解析失败" description={error} />}
+      {!isWorkbench && !isPerformanceStats && error && (
+        <StatusCard tone="danger" title="文件解析失败" description={error} />
+      )}
 
       {isWorkbench ? (
         <WorkbenchView />
+      ) : isPerformanceStats ? (
+        <PerformanceStatsView />
       ) : isPresales ? (
         <PresalesDashboardView
           data={presalesData ?? EMPTY_DASHBOARD_DATA}
           previousData={previousPresalesData}
+          versions={presalesVersions}
           onUpload={handleFile}
         />
       ) : (
@@ -175,11 +206,13 @@ function ModuleNav({
   onSales,
   onPresales,
   onWorkbench,
+  onPerformanceStats,
 }: {
   active: ModuleKey;
   onSales: () => void;
   onPresales: () => void;
   onWorkbench: () => void;
+  onPerformanceStats: () => void;
 }) {
   return (
     <nav className="module-nav" aria-label="驾驶舱栏目">
@@ -191,6 +224,9 @@ function ModuleNav({
       </button>
       <button className={active === 'workbench' ? 'active' : ''} onClick={onWorkbench}>
         售前工作台
+      </button>
+      <button className={active === 'performanceStats' ? 'active' : ''} onClick={onPerformanceStats}>
+        销售业绩统计
       </button>
     </nav>
   );

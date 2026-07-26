@@ -30,6 +30,19 @@ export default [
     },
   },
 
+  // Node 脚本配置
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
+
   // 项目特定配置
   {
     files: ['**/*.{ts,tsx}'],

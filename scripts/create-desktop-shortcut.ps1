@@ -1,124 +1,37 @@
+# 在桌面创建「销售驾驶舱」启动快捷方式，并把 public/app-icon.ico 应用上去。
+# 图标本身由 public/app-icon.svg 源文件 + 重新生成的 public/app-icon.ico 提供。
+# 用法（PowerShell，可双击）：
+#   powershell -ExecutionPolicy Bypass -File .\scripts\create-desktop-shortcut.ps1
+
 param(
-  [string]$ShortcutName = ''
+  [string]$ShortcutName = '销售驾驶舱'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$launcherPath = Join-Path $projectRoot 'start-dashboard.bat'
-$publicDir = Join-Path $projectRoot 'public'
-$iconPath = Join-Path $publicDir 'app-icon.ico'
+$batPath     = Join-Path $projectRoot 'start-dashboard.bat'
+$iconPath    = Join-Path $projectRoot 'public\app-icon.ico'
 
-if (-not (Test-Path -LiteralPath $launcherPath)) {
-  throw "Launcher not found: $launcherPath"
-}
+if (-not (Test-Path -LiteralPath $batPath))  { throw "找不到 $batPath" }
+if (-not (Test-Path -LiteralPath $iconPath)) { throw "找不到 $iconPath（先确认 public/app-icon.ico 存在）" }
 
-if ([string]::IsNullOrWhiteSpace($ShortcutName)) {
-  $ShortcutName = [string]::Concat(
-    [char]0x9500,
-    [char]0x552E,
-    [char]0x5DE5,
-    [char]0x4F5C,
-    [char]0x53F0
-  )
-}
+$desktop    = [Environment]::GetFolderPath('Desktop')
+$shortcutLnk = Join-Path $desktop "$ShortcutName.lnk"
 
-if (-not (Test-Path -LiteralPath $publicDir)) {
-  New-Item -ItemType Directory -Path $publicDir | Out-Null
-}
+# 已有同名快捷方式先删掉，避免残留旧图标缓存。
+if (Test-Path -LiteralPath $shortcutLnk) { Remove-Item -LiteralPath $shortcutLnk -Force }
 
-Add-Type -AssemblyName System.Drawing
+$ws = New-Object -ComObject WScript.Shell
+$sc = $ws.CreateShortcut($shortcutLnk)
+$sc.TargetPath       = $batPath
+$sc.WorkingDirectory = $projectRoot
+$sc.IconLocation     = "$iconPath,0"
+$sc.Description      = '一键启动销售驾驶舱（Vite + http://127.0.0.1:5173/）'
+$sc.Save()
 
-function New-IconPngBytes {
-  param([int]$Size)
-
-  $bitmap = New-Object System.Drawing.Bitmap $Size, $Size
-  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-  $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $graphics.Clear([System.Drawing.Color]::Transparent)
-
-  $rect = New-Object System.Drawing.Rectangle 0, 0, $Size, $Size
-  $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-    $rect,
-    [System.Drawing.Color]::FromArgb(255, 37, 99, 235),
-    [System.Drawing.Color]::FromArgb(255, 15, 118, 110),
-    45
-  )
-  $graphics.FillRectangle($brush, $rect)
-
-  $fontFamily = New-Object System.Drawing.FontFamily 'Microsoft YaHei'
-  $fontSize = [Math]::Max(12, [Math]::Round($Size * 0.36))
-  $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-  $text = [string][char]0x552E
-  $textSize = $graphics.MeasureString($text, $font)
-  $textX = ($Size - $textSize.Width) / 2
-  $textY = ($Size - $textSize.Height) / 2 - ($Size * 0.03)
-  $textBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-  $graphics.DrawString($text, $font, $textBrush, $textX, $textY)
-
-  $accentBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(230, 153, 246, 228))
-  $graphics.FillEllipse($accentBrush, $Size * 0.66, $Size * 0.68, $Size * 0.16, $Size * 0.16)
-
-  $stream = New-Object System.IO.MemoryStream
-  $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-  [byte[]]$bytes = $stream.ToArray()
-
-  $graphics.Dispose()
-  $bitmap.Dispose()
-  $brush.Dispose()
-  $font.Dispose()
-  $fontFamily.Dispose()
-  $textBrush.Dispose()
-  $accentBrush.Dispose()
-  $stream.Dispose()
-
-  return ,$bytes
-}
-
-$sizes = @(16, 24, 32, 48, 64, 128, 256)
-$images = foreach ($size in $sizes) {
-  [pscustomobject]@{
-    Size = $size
-    Bytes = New-IconPngBytes -Size $size
-  }
-}
-
-$fileStream = [System.IO.File]::Create($iconPath)
-$writer = New-Object System.IO.BinaryWriter($fileStream)
-$writer.Write([UInt16]0)
-$writer.Write([UInt16]1)
-$writer.Write([UInt16]$images.Count)
-
-$offset = 6 + ($images.Count * 16)
-foreach ($image in $images) {
-  $entrySize = if ($image.Size -eq 256) { 0 } else { $image.Size }
-  $writer.Write([byte]$entrySize)
-  $writer.Write([byte]$entrySize)
-  $writer.Write([byte]0)
-  $writer.Write([byte]0)
-  $writer.Write([UInt16]1)
-  $writer.Write([UInt16]32)
-  $writer.Write([UInt32]$image.Bytes.Length)
-  $writer.Write([UInt32]$offset)
-  $offset += $image.Bytes.Length
-}
-
-foreach ($image in $images) {
-  $writer.Write($image.Bytes)
-}
-
-$writer.Dispose()
-$fileStream.Dispose()
-
-$desktopPath = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktopPath "$ShortcutName.lnk"
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $launcherPath
-$shortcut.WorkingDirectory = $projectRoot
-$shortcut.IconLocation = $iconPath
-$shortcut.Description = 'Start local sales dashboard'
-$shortcut.Save()
-
-Write-Host "Shortcut created: $shortcutPath"
-Write-Host "Icon file: $iconPath"
+Write-Host ""
+Write-Host "已生成桌面快捷方式：$shortcutLnk" -ForegroundColor Green
+Write-Host "图标源：$iconPath" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "提示：桌面图标若仍是旧图标，按 F5 刷新即可看到新图标。"

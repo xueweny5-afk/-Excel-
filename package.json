@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check:env": "node scripts/check-env.mjs",
+    "predev": "node scripts/check-env.mjs",
     "dev": "vite --host 127.0.0.1",
+    "prebuild": "node scripts/check-env.mjs",
     "build": "tsc -b && vite build",
+    "prepreview": "node scripts/check-env.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",

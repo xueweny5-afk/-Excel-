@@ -28,7 +28,10 @@ export function DistributionCard({ title, subtitle, items, onClick }: Distributi
             option={donutOption(items)}
             style={{ height: 230 }}
             onEvents={{
-              click: (params: { name?: unknown }) => onClick(String(params.name ?? '')),
+              click: (params) => {
+                const p = params as { name?: unknown };
+                onClick(String(p.name ?? ''));
+              },
             }}
             notMerge
           />

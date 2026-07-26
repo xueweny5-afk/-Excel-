@@ -17,6 +17,8 @@ export interface PPLRecord {
   industryLevel2?: string;
   t2000CustomerTag?: string;
   product: string;
+  productLevel2?: string;
+  productLevel3?: string;
   amount: number;
   stage: string;
   status: string;

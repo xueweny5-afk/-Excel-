@@ -16,9 +16,8 @@ export interface EChartsReactProps {
   className?: string;
   theme?: string | object;
   onChartReady?: (instance: EChartsInstance) => void;
-  // 事件回调签名各不相同，使用宽松的函数类型
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onEvents?: Record<string, (...args: any[]) => void>;
+  /** 事件回调：参数通常是 `MouseEventParams` 或 `ECElementEvent`，但签名不固定，用 unknown[] 替代 any */
+  onEvents?: Record<string, (...args: unknown[]) => void>;
   notMerge?: boolean;
   opts?: object;
 }

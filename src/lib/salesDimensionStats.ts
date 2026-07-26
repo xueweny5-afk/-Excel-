@@ -1,4 +1,5 @@
 import type { DashboardData, PPLRecord } from '../domain';
+import { normalizeBusinessKey, parseTokens } from './normalize';
 
 export interface SalesDimensionStats {
   /** 主键：PPL 明细的 owner（Pipeline 所有人 / 销售 / 售前） */
@@ -42,7 +43,7 @@ export function buildSalesDimensionStats(data: DashboardData): SalesDimensionSta
   // owner → PPL 行索引
   const ownerRowsMap = new Map<string, PPLRecord[]>();
   rows.forEach((row) => {
-    const key = normalizeOwner(row.owner);
+    const key = normalizeBusinessKey(row.owner);
     if (!key) return;
     const list = ownerRowsMap.get(key) ?? [];
     list.push(row);
@@ -52,9 +53,9 @@ export function buildSalesDimensionStats(data: DashboardData): SalesDimensionSta
   // 全局 customer → owners 索引（用于业绩反查：业绩里 customer 出现在哪个 owner 名下）
   const customerOwners = new Map<string, Set<string>>();
   rows.forEach((row) => {
-    const ownerKey = normalizeOwner(row.owner);
+    const ownerKey = normalizeBusinessKey(row.owner);
     if (!ownerKey) return;
-    const customerKey = normalizeCustomer(row.customerName);
+    const customerKey = normalizeBusinessKey(row.customerName);
     if (!customerKey) return;
     const set = customerOwners.get(customerKey) ?? new Set<string>();
     set.add(ownerKey);
@@ -65,7 +66,7 @@ export function buildSalesDimensionStats(data: DashboardData): SalesDimensionSta
   // 注：业绩里的 customerName 可能是简称，PPL 里是全称，所以用双向包含匹配
   const ownerPerfMap = new Map<string, { order: number; profit: number }>();
   performanceRows.forEach((row) => {
-    const customerKey = normalizeCustomer(row.customerName);
+    const customerKey = normalizeBusinessKey(row.customerName);
     if (!customerKey) return;
     // 遍历所有 PPL 客户名做双向包含匹配
     const matchedOwners = new Set<string>();
@@ -104,7 +105,7 @@ export function buildSalesDimensionStats(data: DashboardData): SalesDimensionSta
     let establishedAmount = 0;
 
     ownerRows.forEach((row) => {
-      const customer = normalizeCustomer(row.customerName);
+      const customer = normalizeBusinessKey(row.customerName);
       if (customer) customers.add(customer);
       const amount = toNumber(row.amount);
       pipelineAmount += amount;
@@ -149,11 +150,11 @@ export function buildSalesDimensionStats(data: DashboardData): SalesDimensionSta
  * 留空 → 返回全部；多值用逗号/空格/换行分隔。
  */
 export function filterSalesStats(stats: SalesDimensionStats[], input: string): SalesDimensionStats[] {
-  const tokens = parseInput(input);
+  const tokens = parseTokens(input);
   if (tokens.length === 0) return stats;
   const matched = new Set<string>();
   for (const token of tokens) {
-    const needle = normalizeOwner(token);
+    const needle = normalizeBusinessKey(token);
     if (!needle) continue;
     stats.forEach((item) => {
       if (item.normalizedOwner.includes(needle) || needle.includes(item.normalizedOwner)) {
@@ -190,15 +191,15 @@ export function getPplRowsByOwner(
   data: DashboardData,
   ownerDisplay: string,
 ): PPLRecord[] {
-  const target = normalizeOwner(ownerDisplay);
+  const target = normalizeBusinessKey(ownerDisplay);
   if (!target) return [];
   const rows = data.ppl;
   // 先精确匹配
-  const exact = rows.filter((row) => normalizeOwner(row.owner) === target);
+  const exact = rows.filter((row) => normalizeBusinessKey(row.owner) === target);
   if (exact.length > 0) return exact;
   // 再模糊匹配（owner 输入可能有变体，比如包含字符差异）
   return rows.filter((row) => {
-    const key = normalizeOwner(row.owner);
+    const key = normalizeBusinessKey(row.owner);
     return key && (target.includes(key) || key.includes(target));
   });
 }
@@ -238,26 +239,24 @@ function pickDisplayOwner(rows: PPLRecord[], normalizedKey: string): string {
   return first || normalizedKey;
 }
 
-function isForecastRow(row: PPLRecord): boolean {
+/** 公开：判定 Forecast 行为 Commit / Best Case */
+export function isForecastRow(row: PPLRecord): boolean {
   return row.forecastType === 'Commit' || row.forecastType === 'Best Case';
 }
 
-function isT2000Row(row: PPLRecord): boolean {
+/** 公开：判定 PPL 记录是否属于 T2000 客户 */
+export function isT2000Row(row: PPLRecord): boolean {
   const tag = String(row.t2000CustomerTag ?? '').toLowerCase();
   return tag.includes('t2000');
 }
 
-function isEstablishedRow(row: PPLRecord): boolean {
+/** 公开：判定 PPL 记录是否已立项及以上 */
+export function isEstablishedRow(row: PPLRecord): boolean {
   const stage = String(row.stage ?? '');
   return stage.includes('立项') || stage.includes('预算到位') ||
     stage.includes('方案评估') || stage.includes('共识') ||
     stage.includes('品牌') || stage.includes('招标') || stage.includes('采购') ||
     stage.includes('Forecast');
-}
-
-function parseInput(input: string): string[] {
-  if (!input) return [];
-  return input.split(/[\s,，；;、\n\r]+/).map((s) => s.trim()).filter(Boolean);
 }
 
 function escapeCsv(value: string): string {
@@ -272,14 +271,4 @@ function toNumber(value: unknown): number {
     return Number.isFinite(num) ? num : 0;
   }
   return 0;
-}
-
-function normalizeOwner(value: string | undefined | null): string {
-  if (!value) return '';
-  return String(value).replace(/\s+/g, '').trim();
-}
-
-function normalizeCustomer(value: string | undefined | null): string {
-  if (!value) return '';
-  return String(value).replace(/\s+/g, '').trim();
 }

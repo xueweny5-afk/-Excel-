@@ -1,4 +1,7 @@
 import type { DashboardData, PPLRecord } from '../domain';
+import { normalizeBusinessKey, parseTokens } from './normalize';
+
+export { parseTokens };
 
 export interface CustomerStats {
   /** 业绩明细中的"最终用户"作为主键 */
@@ -34,7 +37,7 @@ export interface CustomerStats {
 export function buildPresalesOwnerStats(data: DashboardData): CustomerStats[] {
   const pplByCustomer = new Map<string, PPLRecord[]>();
   data.ppl.forEach((row) => {
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     const list = pplByCustomer.get(key) ?? [];
     list.push(row);
@@ -44,7 +47,7 @@ export function buildPresalesOwnerStats(data: DashboardData): CustomerStats[] {
   // 业绩按最终用户聚合
   const perfByCustomer = new Map<string, { order: number; profit: number; count: number; isT2000: boolean }>();
   data.performance.forEach((row) => {
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (!key) return;
     const current = perfByCustomer.get(key) ?? { order: 0, profit: 0, count: 0, isT2000: false };
     current.order += toNumber(row.orderAmount);
@@ -63,7 +66,7 @@ export function buildPresalesOwnerStats(data: DashboardData): CustomerStats[] {
   data.ppl.forEach((row) => {
     if (!row.t2000CustomerTag) return;
     if (!String(row.t2000CustomerTag).toLowerCase().includes('t2000')) return;
-    const key = normalizeCustomer(row.customerName);
+    const key = normalizeBusinessKey(row.customerName);
     if (key) t2000Set.add(key);
   });
 
@@ -107,11 +110,11 @@ export function buildPresalesOwnerStats(data: DashboardData): CustomerStats[] {
  * - 多值：用逗号/空格/换行/分号/顿号分隔，逐个模糊匹配，去重
  */
 export function filterOwnerStats(stats: CustomerStats[], input: string): CustomerStats[] {
-  const tokens = parseInput(input);
+  const tokens = parseTokens(input);
   if (tokens.length === 0) return stats;
   const matched = new Set<string>();
   for (const token of tokens) {
-    const needle = normalizeCustomer(token);
+    const needle = normalizeBusinessKey(token);
     if (!needle) continue;
     stats.forEach((item) => {
       if (item.normalizedCustomer.includes(needle) || needle.includes(item.normalizedCustomer)) {
@@ -164,19 +167,6 @@ export function exportOwnerStatsCsv(stats: CustomerStats[]): string {
   return [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
 
-function parseInput(input: string): string[] {
-  if (!input) return [];
-  return input
-    .split(/[\s,，；;、\n\r]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function escapeCsv(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
 function pickDisplayName(
   ppl: PPLRecord[],
   normalizedKey: string,
@@ -185,7 +175,7 @@ function pickDisplayName(
   // 优先 PPL 的客户名（更完整），其次业绩中的客户名，最后 raw 里查找
   const fromPpl = ppl[0]?.customerName?.trim();
   if (fromPpl) return fromPpl;
-  const fromPerf = data.performance.find((row) => normalizeCustomer(row.customerName) === normalizedKey)?.customerName?.trim();
+  const fromPerf = data.performance.find((row) => normalizeBusinessKey(row.customerName) === normalizedKey)?.customerName?.trim();
   if (fromPerf) return fromPerf;
   return normalizedKey;
 }
@@ -207,7 +197,7 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-function normalizeCustomer(value: string | undefined | null): string {
-  if (!value) return '';
-  return String(value).replace(/\s+/g, '').trim();
+function escapeCsv(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
 }

@@ -9,6 +9,7 @@ export function resetStore() {
     salesData: null,
     presalesData: null,
     previousPresalesData: null,
+    presalesVersions: [],
     filters: {
       owner: '',
       industryLevel1: '',

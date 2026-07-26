@@ -15,7 +15,21 @@ import { PPL_FIELD_ALIASES, REQUIRED_PPL_FIELDS } from '../fieldAliases';
 type Row = Record<string, unknown>;
 
 // ========== 文件/Sheet 安全边界 ==========
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+/**
+ * 安全边界常量集中管理。
+ *
+ * 已知风险：xlsx@0.18.5 上游有两个 GHSA：
+ *   - GHSA-4r6h-8v6p-xvw（CWE-1321 原型链污染，<0.19.3）
+ *   - GHSA-5pgg-2g8v-p4x9（CWE-1333 ReDoS，<0.20.2）
+ * 上游未发布修复版（npm `xlsx` 最新就是 0.18.5）。
+ * 缓解策略：
+ *   1. 限制文件大小（MAX_FILE_SIZE）减小 ReDoS 攻击窗口
+ *   2. 限制 Sheet / 行 / 列 / 单元格字符串长度（防止恶意大文件耗尽内存）
+ *   3. 解析前 magic bytes 校验（detectContainer、validateWorkbookContent）
+ *   4. parseDashboardFile / parseNaCustomers 后立即 sanitizeRow
+ *   5. 工作台导入走 IndexedDB 备份恢复前 schema 校验（详见 db.ts / 备份恢复）
+ */
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_SHEETS = 20;
 const MAX_ROWS = 50000;
 const MAX_COLS = 200;
@@ -80,8 +94,10 @@ const LARGE_AMOUNT = 500;
 const LARGE_LOW_WIN_RATE = 0.3;
 /** 早期阶段阈值天数（距今 ≤ X 天且处于早期阶段则风险） */
 const EARLY_STAGE_DAYS = 90;
-/** 单元格最大长度（防止恶意超长字符串污染内存） */
-const MAX_CELL_LENGTH = 10000;
+/** 单元格最大长度（防止恶意超长字符串污染内存）
+ * 安全边界常量定义见文件顶部"文件/Sheet 安全边界"区块。
+ */
+const MAX_CELL_LENGTH = 5000;
 
 /**
  * PPLRecord.id 计数种子。
@@ -99,7 +115,16 @@ const PERFORMANCE_FIELD_ALIASES: Record<string, string[]> = {
   salesGrossProfit: ['销售毛利（含激励）', '销售毛利(含激励)', '销售毛利', '个人毛利'],
   performanceGrossProfit: ['业绩毛利金额（含激励）', '业绩毛利金额(含激励)', '业绩毛利金额', '业绩毛利'],
   finalPerformance: ['最终核算业绩', '核算业绩', '最终业绩'],
-  isT2000: ['T2000客户标签', 'T2000 客户标签', '客户标签', 'CRM标签', '客户Tag', '客户是否T2000', '客户是否 T2000', '是否T2000'],
+  isT2000: [
+    'T2000客户标签',
+    'T2000 客户标签',
+    '客户标签',
+    'CRM标签',
+    '客户Tag',
+    '客户是否T2000',
+    '客户是否 T2000',
+    '是否T2000',
+  ],
 };
 
 // ========== 入口 ==========
@@ -141,8 +166,14 @@ export async function parseDashboardFile(file: File): Promise<DashboardData> {
   const summarySheetName = findSheet(workbook.SheetNames, ['数据汇总', '汇总']);
   const activitySheetName = findSheet(workbook.SheetNames, ['新增PPL+活动记录', '活动记录', '新增PPL']);
   const performanceSheetName =
-    findSheet(workbook.SheetNames, ['Y26业绩明细', 'Y26 业绩明细', '业绩明细', '业绩', '订单明细', '下单明细']) ??
-    findPerformanceSheetByHeaders(workbook.SheetNames, sheets);
+    findSheet(workbook.SheetNames, [
+      'Y26业绩明细',
+      'Y26 业绩明细',
+      '业绩明细',
+      '业绩',
+      '订单明细',
+      '下单明细',
+    ]) ?? findPerformanceSheetByHeaders(workbook.SheetNames, sheets);
   const naSheetNames = findCurrentQuarterNaSheets(workbook.SheetNames);
 
   const pplRows = pplSheetName ? sheets[pplSheetName] : [];
@@ -237,16 +268,22 @@ function validateWorkbookContent(file: File, arrayBuffer: ArrayBuffer) {
     .join(' ');
   const isZipOffice = bytes[0] === 0x50 && bytes[1] === 0x4b;
   const isLegacyOffice = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
-  const isTextLike = bytes.every((byte) => byte === 0 || byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126));
+  const isTextLike = bytes.every(
+    (byte) => byte === 0 || byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126),
+  );
   const inverted = Array.from(bytes).map((byte) => 0xff - byte);
   const isVirtualShell = String.fromCharCode(...inverted.slice(0, 4)) === 'VSBX';
 
   if (isZipOffice || isLegacyOffice || (ext === '.xls' && isTextLike)) return;
 
   if (isVirtualShell) {
-    throw new Error('该文件不是标准 Excel 工作簿，像是 WPS/系统生成的临时壳文件。请在 Excel 或 WPS 中打开后，另存为标准 .xlsx 或 .xlsm 再导入。');
+    throw new Error(
+      '该文件不是标准 Excel 工作簿，像是 WPS/系统生成的临时壳文件。请在 Excel 或 WPS 中打开后，另存为标准 .xlsx 或 .xlsm 再导入。',
+    );
   }
-  throw new Error(`该文件扩展名是 ${ext}，但内容不是标准 Excel 文件，文件头为 ${signature}。请另存为标准 .xlsx / .xlsm 后再导入。`);
+  throw new Error(
+    `该文件扩展名是 ${ext}，但内容不是标准 Excel 文件，文件头为 ${signature}。请另存为标准 .xlsx / .xlsm 后再导入。`,
+  );
 }
 
 export function sanitizeRow(row: Row): Row {
@@ -283,7 +320,9 @@ function findCurrentQuarterNaSheets(sheetNames: string[]): string[] {
   if (sheetMeta.length === 0) return [];
 
   const currentQuarterNumber = Number(currentQuarter.replace(/\D/g, ''));
-  const matched = sheetMeta.filter((item) => item.meta.year === currentYear && item.meta.quarter === currentQuarterNumber);
+  const matched = sheetMeta.filter(
+    (item) => item.meta.year === currentYear && item.meta.quarter === currentQuarterNumber,
+  );
   if (matched.length > 0) return matched.map((item) => item.name);
 
   // 回退：选最新（年最大，再 Q 最大）
@@ -318,7 +357,10 @@ function findPplSheetByHeaders(sheetNames: string[], sheets: Record<string, Row[
 function findPerformanceSheetByHeaders(sheetNames: string[], sheets: Record<string, Row[]>) {
   return sheetNames.find((sheetName) => {
     const fieldMap = mapPerformanceFields(sheets[sheetName]?.[0] ?? {});
-    return Boolean(fieldMap.customerName && (fieldMap.orderAmount || fieldMap.salesGrossProfit || fieldMap.performanceGrossProfit));
+    return Boolean(
+      fieldMap.customerName &&
+      (fieldMap.orderAmount || fieldMap.salesGrossProfit || fieldMap.performanceGrossProfit),
+    );
   });
 }
 
@@ -333,7 +375,9 @@ function mapPerformanceFields(row: Row) {
 function mapFieldsWithAliases(row: Row, aliasesByField: Record<string, string[]>) {
   const headers = Object.keys(row);
   return Object.entries(aliasesByField).reduce<Record<string, string>>((acc, [field, aliases]) => {
-    const match = aliases.map((alias) => headers.find((header) => headerMatches(header, alias))).find(Boolean);
+    const match = aliases
+      .map((alias) => headers.find((header) => headerMatches(header, alias)))
+      .find(Boolean);
     if (match) acc[field] = match;
     return acc;
   }, {});
@@ -394,6 +438,8 @@ function normalizePpl(
     industryLevel2: readString(row, fieldMap.industryLevel2),
     t2000CustomerTag: readString(row, fieldMap.t2000CustomerTag),
     product: readString(row, fieldMap.product) || '未分类产品',
+    productLevel2: readString(row, fieldMap.productLevel2),
+    productLevel3: readString(row, fieldMap.productLevel3),
     amount,
     stage,
     status,
@@ -413,16 +459,25 @@ function parsePerformance(rows: Row[]): PerformanceRecord[] {
   return rows.flatMap((row) => {
     const customerName = readString(row, fieldMap.customerName);
     const orderAmount = parseAmountByHeader(row[fieldMap.orderAmount], fieldMap.orderAmount, 'yuan');
-    const salesGrossProfit = parseAmountByHeader(row[fieldMap.salesGrossProfit], fieldMap.salesGrossProfit, 'yuan');
+    const salesGrossProfit = parseAmountByHeader(
+      row[fieldMap.salesGrossProfit],
+      fieldMap.salesGrossProfit,
+      'yuan',
+    );
     const performanceGrossProfit = parseAmountByHeader(
       row[fieldMap.performanceGrossProfit],
       fieldMap.performanceGrossProfit,
       'yuan',
     );
-    const finalPerformance = parseAmountByHeader(row[fieldMap.finalPerformance], fieldMap.finalPerformance, 'yuan');
+    const finalPerformance = parseAmountByHeader(
+      row[fieldMap.finalPerformance],
+      fieldMap.finalPerformance,
+      'yuan',
+    );
     const contractAmount = parseAmountByHeader(row[fieldMap.contractAmount], fieldMap.contractAmount, 'yuan');
 
-    if (!customerName && !orderAmount && !salesGrossProfit && !performanceGrossProfit && !finalPerformance) return [];
+    if (!customerName && !orderAmount && !salesGrossProfit && !performanceGrossProfit && !finalPerformance)
+      return [];
 
     return [
       {
@@ -460,7 +515,9 @@ function readString(row: Row, key?: string) {
 }
 
 function parseBoolean(value: unknown) {
-  const text = String(value ?? '').trim().toLowerCase();
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
   if (!text) return false;
   // 把"--" / "无" / "/" / "n/a" 等"无值"占位符也视为 false，
   // 否则 T2000 类布尔字段（如"客户是否T2000"列里用户填"--"）会被错判成 true
@@ -469,7 +526,9 @@ function parseBoolean(value: unknown) {
 
 function parseT2000Value(value: unknown, header?: string) {
   const normalizedHeader = normalizeHeader(header ?? '');
-  const normalizedValue = String(value ?? '').replace(/\s/g, '').toLowerCase();
+  const normalizedValue = String(value ?? '')
+    .replace(/\s/g, '')
+    .toLowerCase();
   if (!normalizedValue) return false;
   const isTagField =
     normalizedHeader.includes('客户标签') ||
@@ -509,13 +568,15 @@ function parseAmountByHeader(value: unknown, header?: string, mode: 'wanyuan' | 
 
   if (valueText.includes('万') || valueText.includes('萬')) return amount;
 
-  if (/万元|萬元/.test(headerText)) return amount;          // 表头显式说"万元"
+  if (/万元|萬元/.test(headerText)) return amount; // 表头显式说"万元"
   if (/(^|[^万])元/.test(headerText) && !/万元/.test(headerText)) return amount / 10000;
 
   // 业绩/合同类列在售前模块常常以"元"为单位，按 mode 区分：
   // - mode='yuan'：÷10000
   // - mode='wanyuan'：保持原值（销售 PPL 不该用这些列名做 amount，但兜底防呆）
-  if (/总价|总额|合同金额|合同总额|下单金额|订单金额|销售毛利|业绩毛利|核算业绩|预计合同金额/.test(headerText)) {
+  if (
+    /总价|总额|合同金额|合同总额|下单金额|订单金额|销售毛利|业绩毛利|核算业绩|预计合同金额/.test(headerText)
+  ) {
     return mode === 'yuan' ? amount / 10000 : amount;
   }
   // 兜底：万元模式保持原值；元模式 ÷10000。
@@ -539,7 +600,13 @@ export function parseRate(value: unknown) {
 
 export function parseForecast(value: unknown): ForecastType {
   const text = String(value ?? '').toLowerCase();
-  if (text.includes('commit') || text.includes('是') || text.includes('确认') || text.includes('承诺') || text.includes('中标'))
+  if (
+    text.includes('commit') ||
+    text.includes('是') ||
+    text.includes('确认') ||
+    text.includes('承诺') ||
+    text.includes('中标')
+  )
     return 'Commit';
   if (text.includes('best')) return 'Best Case';
   if (text.includes('pipeline') || text.includes('争取') || text.includes('商机')) return 'Pipeline';
@@ -708,9 +775,7 @@ function parseNaCustomers(rows: Row[], sourceSheet: string): NaCustomer[] {
         customerType,
         quadrant: String(row['客户象限名称'] ?? '').trim(),
         isT2000: t2000.toLowerCase().includes('t2000') || scaleTarget.length > 0,
-        industryLevel1: String(
-          row['最终客户所属一级行业'] ?? row['最终客户所属二级行业 (1)'] ?? '',
-        ).trim(),
+        industryLevel1: String(row['最终客户所属一级行业'] ?? row['最终客户所属二级行业 (1)'] ?? '').trim(),
         industryLevel2: String(row['最终客户所属二级行业'] ?? '').trim(),
         scaleTarget,
         sourceSheet,
